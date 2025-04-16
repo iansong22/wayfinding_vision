@@ -1,3 +1,6 @@
 [submodule "spencer_people_tracking"]
 	path = spencer_people_tracking
 	url = https://github.com/spencer-project/spencer_people_tracking.git
+[submodule "ros_bridge_docker/ros-humble-ros1-bridge-builder"]
+	path = ros_bridge_docker/ros-humble-ros1-bridge-builder
+	url = https://github.com/TommyChangUMD/ros-humble-ros1-bridge-builder.git

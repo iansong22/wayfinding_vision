@@ -2,13 +2,13 @@
 
 if [ $# -eq 0 ]
 then
-    echo "ERROR -- missing argument: variant of Docker image to launch (e.g. kinetic, kinetic-gpu)"
-    exit 1
+    IMAGE_VARIANT="foxy"
+else
+    # Get name of Docker image
+    IMAGE_VARIANT=$1
+    shift
 fi
-
-# Get name of Docker image
-IMAGE_VARIANT=$1
-shift
+echo "Variant of Docker image set to: $IMAGE_VARIANT"
 
 # Parse optional command-line arguments
 USE_HOST_NETWORK=1
@@ -45,10 +45,16 @@ echo "starting container..."
             # --env="QT_X11_NO_MITSHM=1" \
             # --env="XAUTHORITY=$XAUTH" \
             # --volume="$XAUTH:$XAUTH" \
-docker run  -it \
+docker run -it --rm \
             --env="DISPLAY=$DISPLAY" \
-            --volume="/tmp/.X11-unix:/tmp/.X11-unix" \
+            --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
             $NETWORK_ARGS \
+            -v /dev/shm:/dev/shm \
+            --env="QT_X11_NO_MITSHM=1" \
+            --env ROS_DOMAIN_ID=0 \
+            --env RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+            -v ./src/CycloneDDS.xml:/root/CycloneDDS.xml \
             wayfinding/ros1_bridge:$IMAGE_VARIANT
+            # --env CYCLONEDDS_URI=file:///root/CycloneDDS.xml \
             
             
