@@ -1,5 +1,0 @@
-process[tracking_visualization_rviz-39]: started with pid [39057]
-Authorization required, but no authorization protocol specified
-qt.qpa.xcb: could not connect to display :1
-qt.qpa.plugin: Could not load the Qt platform plugin "xcb" in "" even though it was found.
-This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
