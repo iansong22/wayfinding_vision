@@ -11,6 +11,29 @@ To build with no cached docker container layers, add `--no-cache` to the Makefil
 
 Changes to `run.sh` (not sure if necessary?):
 ```
+# Parse optional command-line arguments
+USE_HOST_NETWORK=1
+while :; do
+    case $1 in -h|--host-network) USE_HOST_NETWORK=1; shift;
+        ;;
+        *) break
+    esac
+done
+EXTRA_DOCKER_ARGS="$@"
+
+# Build network args
+if [ $USE_HOST_NETWORK -eq 1 ]
+then
+    # This currently requires privileged access, otherwise rviz will crash. See:
+    # https://answers.ros.org/question/301056/ros2-rviz-in-docker-container/?answer=301062#post-id-301062
+    NETWORK_ARGS="--network=host --privileged --ipc=host --pid=host";
+    echo "connection to host network enabled, running in privileged mode"
+else
+    NETWORK_ARGS="";
+    echo "connection to host network disabled, network will be isolated from host. use -h to change this"
+fi
+
+
 XAUTH=/tmp/.docker.xauth
 touch $XAUTH
 xauth nlist :1 | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
