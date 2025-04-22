@@ -5,7 +5,7 @@ To fix noetic-gpu dockerfile (make sure you are on noetic branch):
 RUN rm /etc/apt/sources.list.d/cuda.list
 # RUN rm /etc/apt/sources.list.d/nvidia-ml.list
 ```
-Also add `: public QObject` to `class _AdditionalTopicSubscriber` in `additional_topic_subscriber.h` from `spencer_tracking_rviz_plugin` to fix build error.
+Also change `QObject` to `: public QObject` to `class _AdditionalTopicSubscriber` in `additional_topic_subscriber.h` from `spencer_tracking_rviz_plugin` to fix build error.
 
 To build with no cached docker container layers, add `--no-cache` to the Makefile.
 
