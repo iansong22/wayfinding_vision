@@ -9,6 +9,10 @@ Also change `QObject` to `: public QObject` to `class _AdditionalTopicSubscriber
 
 To build with no cached docker container layers, add `--no-cache` to the Makefile.
 
+The camera output needs to be changed to:
+`ros2 launch realsense2_camera rs_launch.py camera_name:=rgbd_front_top camera_namespace:=/spencer/sensors`.
+Since it needs to match `/spencer/sensors/rgbd_front_top`.
+
 Changes to `run.sh` (not sure if necessary?):
 ```
 # Parse optional command-line arguments
