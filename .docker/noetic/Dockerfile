@@ -32,5 +32,6 @@ ENV PYTHONIOENCODING=UTF-8
 RUN catkin config --extend /opt/ros/$ROS_DISTRO && \
     catkin build -c -s
 
+RUN /bin/bash -c "ln -s /usr/bin/python3 /usr/bin/python"
  # Initialize bashrc
 RUN echo "source ~/catkin_ws/devel/setup.bash" >> /root/.bashrc

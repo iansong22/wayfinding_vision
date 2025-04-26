@@ -89,5 +89,6 @@ docker run --rm -it \
             --env="QT_X11_NO_MITSHM=1" \
             --env="XAUTHORITY=$XAUTH" \
             --volume="$XAUTH:$XAUTH" \
+            --volume="./logs:/root/catkin_ws/logs" \
             spencer/spencer_people_tracking:$IMAGE_VARIANT \
             $COMMAND
