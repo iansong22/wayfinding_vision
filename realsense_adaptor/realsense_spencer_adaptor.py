@@ -62,6 +62,7 @@ def runAdaptor():
     pubDepth = rospy.Publisher('depth/image_rect', Image, queue_size=10)
     callbackDepth = lambda imgMsg : pubDepth.publish(convertDepthEncoding(imgMsg, bridge))
     subDepth = rospy.Subscriber('depth/image_rect_raw', Image, callbackDepth)
+    # subDepth = rospy.Subscriber('aligned_depth_to_color/image_raw', Image, callbackDepth)
 
     pubInfra = rospy.Publisher('rgb/image_rect_color', Image, queue_size=10)
     callbackInfra = lambda imgMsg : pubInfra.publish(convertMonoEncoding(imgMsg, bridge))

@@ -4,10 +4,10 @@
   <arg name="dummy_transforms" default="true" doc="publish TF transform for sensor to groundplane"/>
   
   <!-- Static transform: rgbd_front_top_link -> rgbd_front_top_depth_frame -->
-  <node pkg="tf" type="static_transform_publisher" name="static_rgbd_link_to_depth" args="0 0 0 0 0 0 rgbd_front_top_link rgbd_front_top_depth_frame 30" />
+  <!-- <node pkg="tf" type="static_transform_publisher" name="static_rgbd_link_to_depth" args="0 0 0 0 0 0 rgbd_front_top_link rgbd_front_top_depth_frame 30" /> -->
 
   <!-- Static transform: rgbd_front_top_depth_frame -> rgbd_front_top_depth_optical_frame -->
-  <node pkg="tf" type="static_transform_publisher" name="static_depth_to_depth_optical" args="0 0 0 -1.5708 0 -1.5708 rgbd_front_top_depth_frame rgbd_front_top_depth_optical_frame 30" />
+  <!-- <node pkg="tf" type="static_transform_publisher" name="static_depth_to_depth_optical" args="0 0 0 -1.5708 0 -1.5708 rgbd_front_top_depth_frame rgbd_front_top_depth_optical_frame 30" /> -->
 
   <!-- <include file="$(find realsense2_camera)/launch/rs_rgbd.launch">
     <arg name="camera" value="/spencer/sensors/rgbd_front_top"/>
