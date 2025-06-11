@@ -1,6 +1,10 @@
 # ROS base image without GPU support
 FROM ros:noetic-perception
 
+# RUN apt-get update && apt-get install -y lsb-release curl && rm -rf /var/lib/apt/lists/*
+
+# RUN curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
+
 # Install build tools
 RUN apt-get update && apt-get install -y \
       python3-catkin-tools python3-rosdep python3-pip tmux vim \
