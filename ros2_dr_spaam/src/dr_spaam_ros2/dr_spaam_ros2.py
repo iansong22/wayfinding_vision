@@ -29,11 +29,16 @@ class DrSpaamROS(Node):
         """
         @brief      Reads parameters from ROS server.
         """
-        self.weight_file = self.get_parameter("~weight_file")
-        self.conf_thresh = self.get_parameter("~conf_thresh")
-        self.stride = self.get_parameter("~stride")
-        self.detector_model = self.get_parameter("~detector_model")
-        self.panoramic_scan = self.get_parameter("~panoramic_scan")
+        self.weight_file = "dr_spaam_weights.pth"  # Default weight file
+        self.conf_thresh = 0.5  # Default confidence threshold
+        self.stride = 1.0  # Default stride
+        self.detector_model = "DR-SPAAM"  # Default detector model
+        self.panoramic_scan = True  # Default panoramic scan setting
+        # self.weight_file = self.get_parameter("~weight_file")
+        # self.conf_thresh = self.get_parameter("~conf_thresh")
+        # self.stride = self.get_parameter("~stride")
+        # self.detector_model = self.get_parameter("~detector_model")
+        # self.panoramic_scan = self.get_parameter("~panoramic_scan")
 
     def _init(self):
         """
