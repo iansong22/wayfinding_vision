@@ -100,24 +100,25 @@ class WayfindingYOLONode(Node):
             # Apply gaussian filter to depth area
             depth_area = cv2.GaussianBlur(depth_area, (5, 5), 0)
             valid_depth_mask = (depth_area > MIN_DEPTH) & (depth_area < MAX_DEPTH)
-            min_depth = float(np.min(depth_area[valid_depth_mask]))  # Ignore zero depth values
-            max_depth = float(np.max(depth_area[valid_depth_mask]))  # Ignore zero depth values
+            if(not np.any(valid_depth_mask)):
+                self.get_logger().warn(f"Bounding box {i} has no valid depth values")
+                continue
+            min_depth = float(np.min(depth_area[valid_depth_mask])) 
+            average_depth = float(np.mean(depth_area[valid_depth_mask]))
+            max_depth = float(np.max(depth_area[valid_depth_mask])) 
+            stdev_depth = float(np.std(depth_area[valid_depth_mask]))
+            self.get_logger().info(f"Bounding box {i} | min depth: {min_depth}, average depth: {average_depth}, max depth: {max_depth}, stdev: {stdev_depth}")
 
             # convert x1, y1, x2, y2 to 3d using intrinsic parameters
-            min_x = (((x1 - self.cx) * min_depth )/ self.fx)
-            min_y = (((y1 - self.cy) * min_depth )/ self.fy)
-            max_x = (((x2 - self.cx) * min_depth )/ self.fx)
-            max_y = (((y2 - self.cy) * min_depth )/ self.fy)
+            min_x = (((x1 - self.cx) * average_depth )/ self.fx)
+            min_y = (((y1 - self.cy) * average_depth )/ self.fy)
+            max_x = (((x2 - self.cx) * average_depth )/ self.fx)
+            max_y = (((y2 - self.cy) * average_depth )/ self.fy)
             self.get_logger().info(f"Bounding box {i} | x: ({min_x}, {max_x}), y: ({min_y}, {max_y}) with depth ({min_depth}, {max_depth})")
             
             bbox_msg.markers.append(
                 create_bbox3d(
-                    min_depth,
-                    -max_x,
-                    min_y,
-                    max_depth - min_depth,
-                    abs(max_x - min_x),
-                    abs(max_y - min_y),
+                    [min_x, min_y, average_depth-stdev_depth, max_x, max_y, average_depth+stdev_depth],
                     'camera_link',
                     timestamp
                 )
@@ -129,8 +130,8 @@ class WayfindingYOLONode(Node):
                 scores[index],
                 round(box[0]),
                 round(box[1]),
-                round((box[0] + box[2])),
-                round((box[1] + box[3])),
+                round(box[2]),
+                round(box[3]),
             )
         
         # Publish image with bounding boxes

@@ -7,6 +7,7 @@ from sensor_msgs.msg import Image
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2 as pc2
 import cv2
+import numpy as np
 
 class WayfindingRotationNode(Node):
     def __init__(self, pointcloud=False):
@@ -83,26 +84,25 @@ class WayfindingRotationNode(Node):
         # print("Infra callback called")
     def pointcloud_callback(self, pointcloud_msg):
         # Rotate the point cloud by 90 degrees clockwise
-        points = pc2.read_points(pointcloud_msg, field_names=("x", "y", "z"), skip_nans=True)
-        rotated_points = []
-        for point in points:
-            x, y, z = point
-            # Rotate 90 degrees counter-clockwise around the Z-axis
-            rotated_x = y
-            rotated_y = x
-            rotated_points.append((rotated_x, rotated_y, z))
+        points = pc2.read_points_numpy(pointcloud_msg, skip_nans=True)
+        if points.shape[0] == 0:
+            return  # No points to process
+        # 90 deg clockwise rotation around Z: (x, y, z) -> (y, -x, z)
+        rotated_points_array = np.empty_like(points)
+        rotated_points_array[:, 0] = -points[:, 1]   # x' = -y
+        rotated_points_array[:, 1] = points[:, 0]   # y' = x
+        rotated_points_array[:, 2] = points[:, 2]   # z' = z
+        rotated_points_array[:, 3] = points[:, 3]   # rgb = rgb
+        rotated_points = rotated_points_array.tolist()
+
         # Create a new PointCloud2 message with the rotated points
-        rotated_pointcloud_msg = pc2.create_cloud_xyz32(pointcloud_msg.header, rotated_points)
-        rotated_pointcloud_msg.header = pointcloud_msg.header
-        rotated_pointcloud_msg.height = pointcloud_msg.width
-        rotated_pointcloud_msg.width = pointcloud_msg.height
-        rotated_pointcloud_msg.is_dense = pointcloud_msg.is_dense
+        rotated_pointcloud_msg = pc2.create_cloud(pointcloud_msg.header, pointcloud_msg.fields, rotated_points)
         self.pointcloud_publisher.publish(rotated_pointcloud_msg)
 
-def main(args=None):
+def main(args=None, pointcloud=False):
     rclpy.init(args=args)
 
-    node = WayfindingRotationNode(False) # Set to True if you want to process point clouds
+    node = WayfindingRotationNode(pointcloud) # Set to True if you want to process point clouds
 
     rclpy.spin(node)
 
@@ -114,4 +114,8 @@ def main(args=None):
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description='Run the Wayfinding Rotation Node.')
+    parser.add_argument('--pointcloud', action='store_true', help='Enable point cloud processing')
+    args = parser.parse_args()
+    main(pointcloud=args.pointcloud)

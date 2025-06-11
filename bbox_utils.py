@@ -1,25 +1,52 @@
 from visualization_msgs.msg import Marker, MarkerArray
+from geometry_msgs.msg import Point
 import cv2
 
-def create_bbox3d(x, y, z, width, height, depth, frame_id, timestamp):
+def create_bbox3d(bbox, frame_id, timestamp):
     """
     Create a bounding box marker array for each edge for visualization.
     """
     marker = Marker()
+    marker.action = Marker.ADD
+    marker.ns = "wayfinding"
+    marker.id = 0
     marker.header.frame_id = frame_id
     marker.header.stamp = timestamp
-    marker.type = Marker.CUBE
-    marker.action = Marker.ADD
-    marker.pose.position.x = x + width / 2.0
-    marker.pose.position.y = y + height / 2.0
-    marker.pose.position.z = z + depth / 2.0
-    marker.scale.x = width
-    marker.scale.y = height
-    marker.scale.z = depth
+    marker.type = Marker.LINE_LIST
+
+    # set quaternion so that RViz does not give warning
+    marker.pose.orientation.x = 0.0
+    marker.pose.orientation.y = 0.0
+    marker.pose.orientation.z = 0.0
+    marker.pose.orientation.w = 1.0
+
+    marker.scale.x = 0.03  # line width
     marker.color.a = 0.75  # Transparency
     marker.color.r = 0.0  # Red color
     marker.color.g = 1.0
     marker.color.b = 0.0
+
+    min_x, min_y, min_z, max_x, max_y, max_z = bbox
+    for x, y, z in [
+        # 12 edges of the bounding box
+        (min_x, min_y, min_z), (max_x, min_y, min_z),
+        (min_x, min_y, min_z), (min_x, max_y, min_z),
+        (min_x, min_y, min_z), (min_x, min_y, max_z),
+
+        (max_x, max_y, min_z), (max_x, min_y, min_z),
+        (max_x, max_y, min_z), (max_x, max_y, max_z),
+        (max_x, max_y, min_z), (min_x, max_y, min_z),
+
+        (min_x, max_y, max_z), (max_x, max_y, max_z),
+        (min_x, max_y, max_z), (min_x, min_y, max_z),
+        (min_x, max_y, max_z), (min_x, max_y, min_z),
+
+        (max_x, min_y, max_z), (max_x, max_y, max_z),
+        (max_x, min_y, max_z), (max_x, min_y, min_z),
+        (max_x, min_y, max_z), (min_x, min_y, max_z)
+    ]:
+        marker.points.append(Point(x=x, y=y, z=z))
+    
     return marker
 
 def create_bbox3d_array(bboxes3d, frame_id, timestamp):
