@@ -15,14 +15,14 @@ class WayfindingRotationNode(Node):
         self.get_logger().info("Initializing Wayfinding Rotation Node")
         self.depth_subscription = self.create_subscription(
             Image,
-            '/camera/camera/aligned_depth_to_color/image_raw',
+            '/camera/aligned_depth_to_color/image_raw',
             self.depth_callback,
             10)
         self.depth_subscription # prevent unused variable warning
         self.depth_publisher = self.create_publisher(Image, 'wayfinding/camera/depth/image', 10)
         self.infra_subscription = self.create_subscription(
             Image,
-            'camera/camera/color/image_raw',
+            'camera/color/image_raw',
             self.infra_callback,
             10)
         self.infra_subscription # prevent unused variable warning
@@ -30,7 +30,7 @@ class WayfindingRotationNode(Node):
         if pointcloud:
             self.pointcloud_subscription = self.create_subscription(
                 PointCloud2,
-                '/camera/camera/depth/color/points',
+                '/camera/depth/color/points',
                 self.pointcloud_callback,
                 10)
             self.pointcloud_subscription # prevent unused variable warning

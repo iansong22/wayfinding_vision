@@ -1,7 +1,7 @@
 # import time
 import numpy as np
 import rclpy
-from rlcpy.node import Node
+from rclpy.node import Node
 
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Point, Pose, PoseArray
@@ -19,19 +19,19 @@ class DrSpaamROS(Node):
         self._detector = Detector(
             self.weight_file,
             model=self.detector_model,
-            gpu=True,
+            gpu=False,
             stride=self.stride,
             panoramic_scan=self.panoramic_scan,
         )
-        self.__init()
+        self._init()
 
     def _read_params(self):
         """
         @brief      Reads parameters from ROS server.
         """
-        self.weight_file = "dr_spaam_weights.pth"  # Default weight file
-        self.conf_thresh = 0.5  # Default confidence threshold
-        self.stride = 1.0  # Default stride
+        self.weight_file = "/home/hcal/iansong2/wayfinding_vision/ros2_dr_spaam/models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth"  # Default weight file
+        self.conf_thresh = 0.8  # Default confidence threshold
+        self.stride = 1  # Default stride
         self.detector_model = "DR-SPAAM"  # Default detector model
         self.panoramic_scan = True  # Default panoramic scan setting
         # self.weight_file = self.get_parameter("~weight_file")
@@ -47,27 +47,27 @@ class DrSpaamROS(Node):
         # Publisher
         topic, queue_size, latch = self.read_publisher_param("detections")
         self._dets_pub = self.create_publisher(
-            PoseArray, topic, queue_size=queue_size, latch=latch
+            PoseArray, topic, queue_size
         )
 
         topic, queue_size, latch = self.read_publisher_param("rviz")
         self._rviz_pub = self.create_publisher(
-            Marker, topic, queue_size=queue_size, latch=latch
+            Marker, topic, queue_size
         )
 
         # Subscriber
         topic, queue_size = self.read_subscriber_param("scan")
         self._scan_sub = self.create_subscription(
-            LaserScan, topic, self._scan_callback, queue_size=queue_size
+            LaserScan, topic, self._scan_callback, queue_size
         )
         self._scan_sub
 
     def _scan_callback(self, msg):
-        if (
-            self._dets_pub.get_num_connections() == 0
-            and self._rviz_pub.get_num_connections() == 0
-        ):
-            return
+        # if (
+        #     self._dets_pub.get_num_connections() == 0
+        #     and self._rviz_pub.get_num_connections() == 0
+        # ):
+        #     return
 
         # TODO check the computation here
         if not self._detector.is_ready():
@@ -103,8 +103,11 @@ class DrSpaamROS(Node):
         """
         @brief      Convenience function to read subscriber parameter.
         """
-        topic = self.get_parameter("~subscriber/" + name + "/topic")
-        queue_size = self.get_parameter("~subscriber/" + name + "/queue_size")
+        # topic = self.get_parameter("~subscriber/" + name + "/topic")
+        # queue_size = self.get_parameter("~subscriber/" + name + "/queue_size")
+        if name == "scan":
+            topic = "/scan"
+            queue_size = 1
         return topic, queue_size
 
 
@@ -112,9 +115,20 @@ class DrSpaamROS(Node):
         """
         @brief      Convenience function to read publisher parameter.
         """
-        topic = self.get_parameter("~publisher/" + name + "/topic")
-        queue_size = self.get_parameter("~publisher/" + name + "/queue_size")
-        latch = self.get_parameter("~publisher/" + name + "/latch")
+        # topic = self.get_parameter("~publisher/" + name + "/topic")
+        # queue_size = self.get_parameter("~publisher/" + name + "/queue_size")
+        # latch = self.get_parameter("~publisher/" + name + "/latch")
+        if name == "detections":
+            topic = "/dr_spaam_detections"
+            queue_size = 1
+            latch = False
+        elif name == "rviz":
+            topic = "/dr_spaam_rviz"
+            queue_size = 1
+            latch = False
+        else:
+            raise ValueError(f"Unknown publisher name: {name}")
+
         return topic, queue_size, latch
 
 
@@ -150,15 +164,15 @@ def detections_to_rviz_marker(dets_xy, dets_cls):
         for i in range(len(xy_offsets) - 1):
             # start point of a segment
             p0 = Point()
-            p0.x = d_xy[0] + xy_offsets[i, 0]
-            p0.y = d_xy[1] + xy_offsets[i, 1]
+            p0.x = float(d_xy[0] + xy_offsets[i, 0])
+            p0.y = float(d_xy[1] + xy_offsets[i, 1])
             p0.z = 0.0
             msg.points.append(p0)
 
             # end point
             p1 = Point()
-            p1.x = d_xy[0] + xy_offsets[i + 1, 0]
-            p1.y = d_xy[1] + xy_offsets[i + 1, 1]
+            p1.x = float(d_xy[0] + xy_offsets[i + 1, 0])
+            p1.y = float(d_xy[1] + xy_offsets[i + 1, 1])
             p1.z = 0.0
             msg.points.append(p1)
 
@@ -171,8 +185,8 @@ def detections_to_pose_array(dets_xy, dets_cls):
         # Detector uses following frame convention:
         # x forward, y rightward, z downward, phi is angle w.r.t. x-axis
         p = Pose()
-        p.position.x = d_xy[0]
-        p.position.y = d_xy[1]
+        p.position.x = float(d_xy[0])
+        p.position.y = float(d_xy[1])
         p.position.z = 0.0
         pose_array.poses.append(p)
 
@@ -187,6 +201,6 @@ def main(args=None):
 
     rclpy.shutdown()
 
-if __name__ == 'main':
+if __name__ == '__main__':
     main()
     
