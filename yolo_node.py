@@ -1,10 +1,6 @@
 import numpy as np
 import cv2
 from collections import defaultdict
-import json
-import os
-# from contextlib import redirect_stdout
-import torch
 import time
 
 import rclpy
@@ -13,46 +9,20 @@ from rclpy.node import Node
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image
 from builtin_interfaces.msg import Time
-from visualization_msgs.msg import Marker, MarkerArray
+from visualization_msgs.msg import Marker
 import open3d as o3d
 
 from ultralytics import YOLO
-from yolov8_utils import draw_bounding_box, CLASSES
-from bbox_utils import create_bbox3d
-from geometry_msgs.msg import Point
+from ultralytics.utils import YAML
+from ultralytics.utils.checks import check_yaml
 
-MIN_DEPTH = 0.3
-MAX_DEPTH = 2.5
+CLASSES = YAML.load(check_yaml("coco8.yaml"))["names"]
+from geometry_msgs.msg import Point
 
 def add_box(image, box, color=(0, 0, 255), thickness=2):
     x1, y1, x2, y2 = map(int, box)
     cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
     return image
-
-def add_mask(image, mask, random_color=False, borders = True):
-    if random_color:
-        color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-    else:
-        color = np.array([255, 144, 30, 0.6])
-    h, w = mask.shape[-2:]
-    mask = mask.astype(np.uint8)
-    mask_image =  mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    if borders:
-        import cv2
-        contours, _ = cv2.findContours(mask,cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE) 
-        # Try to smooth contours
-        contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
-        mask_image = cv2.drawContours(mask_image, contours, -1, (1, 1, 1, 0.5), thickness=2) 
-
-    overlay_rgb = mask_image[:, :, :3]
-    alpha = mask_image[:, :, 3]
-
-    # Ensure alpha has shape (H, W, 1) for broadcasting
-    alpha = alpha[:, :, np.newaxis]
-    # print(image)
-    # Blend the images
-    blended = (alpha * overlay_rgb + (1 - alpha) * image).astype(np.uint8)
-    return blended
 
 def detections_to_rviz_marker(dets_xy):
     """
@@ -114,7 +84,7 @@ def depth2PointCloud(depth, rgb, depth_scale, clip_distance_max, mask, intrinsic
 
     depth = depth[np.where(mask>0)]
 
-    valid = (depth > 0) & (depth < clip_distance_max) #& (np.median(depth)-1.5*stdev < depth) & (depth < np.median(depth)+1.5*stdev) #remove from the depth image all values above a given value (meters).
+    valid = (depth > 0) & (depth < clip_distance_max)
     valid = np.ravel(valid)
     
     z = np.ravel(z[np.where(mask>0)])[valid]
@@ -127,7 +97,6 @@ def depth2PointCloud(depth, rgb, depth_scale, clip_distance_max, mask, intrinsic
     
     pointsxyzrgb = np.dstack((x, y, z, r, g, b))
     pointsxyzrgb = pointsxyzrgb.reshape(-1,6)
-    # print(f"Point cloud size: {pointsxyzrgb.shape}")
 
     pc = o3d.geometry.PointCloud()
     pc.points = o3d.utility.Vector3dVector(pointsxyzrgb[:,:3])
@@ -140,7 +109,7 @@ def depth2PointCloud(depth, rgb, depth_scale, clip_distance_max, mask, intrinsic
 
 class WayfindingYOLONode(Node):
     def __init__(self, namespace='wayfinding/camera'):
-        self.fx = 302.86871337890625
+        self.fx = 302.86871337890625 # Change this to use the ros topic later
         self.fy = 302.78631591796875
         self.cx = 212.50067138671875
         self.cy = 125.79319763183594
@@ -159,21 +128,13 @@ class WayfindingYOLONode(Node):
             10)
         self.image_subscription # prevent unused variable warning
         self.bboximage_pub = self.create_publisher(Image, namespace + '/yolo/image', 10)
-        self.bbox3d_pub = self.create_publisher(MarkerArray, namespace + '/yolo/box3d', 10)
         self.rviz_pub = self.create_publisher(Marker, namespace + '/yolo/rviz', 10)
         self.bridge = CvBridge()
         self.model = YOLO('yolov8m-seg.pt', verbose=False)
-        # if torch.cuda.is_available():
-        #     device = torch.device("cuda")
-        # elif torch.backends.mps.is_available():
-        #     device = torch.device("mps")
-        # else:
-        device = torch.device("cpu")
     
     def depth_callback(self, image_msg):
         cvImg = self.bridge.imgmsg_to_cv2(image_msg)
         timestamp_key = image_msg.header.stamp.sec + image_msg.header.stamp.nanosec * 1e-9
-        # self.get_logger().info(f"Received depth_image at timestamp {timestamp}")
         self.image_dict[timestamp_key][1] = cvImg
         if self.image_dict[timestamp_key][0] is not None:
             self.run_yolo(image_msg.header.stamp)
@@ -182,7 +143,6 @@ class WayfindingYOLONode(Node):
     def image_callback(self, image_msg):
         cvImg = self.bridge.imgmsg_to_cv2(image_msg)
         timestamp_key = image_msg.header.stamp.sec + image_msg.header.stamp.nanosec * 1e-9
-        # self.get_logger().info(f"Received color_image at timestamp {timestamp}")
         self.image_dict[timestamp_key][0] = cvImg
         if self.image_dict[timestamp_key][1] is not None:
             self.run_yolo(image_msg.header.stamp)
@@ -195,8 +155,6 @@ class WayfindingYOLONode(Node):
         if color_img is None or depth_img is None:
             self.get_logger().warn(f"Missing images for timestamp")
             return
-        # self.get_logger().info(f"Running YOLO for timestamp {timestamp}")
-        bbox_msg = MarkerArray()
 
         yolo_start = time.time()
         results = self.model(color_img)
