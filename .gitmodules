@@ -1,12 +1,3 @@
-[submodule "spencer_people_tracking"]
-	path = src/spencer_people_tracking
-	url = https://github.com/spencer-project/spencer_people_tracking.git
-[submodule "ros_bridge_docker/ros-humble-ros1-bridge-builder"]
-	path = ros_bridge_docker/ros-humble-ros1-bridge-builder
-	url = https://github.com/TommyChangUMD/ros-humble-ros1-bridge-builder.git
-[submodule "realsense_spencer_adaptor"]
-	path = src/realsense_spencer_adaptor
-	url = https://github.com/tim-fan/realsense_spencer_adaptor.git
 [submodule "2D_lidar_person_detection"]
 	path = 2D_lidar_person_detection
 	url = https://github.com/VisualComputingInstitute/2D_lidar_person_detection.git

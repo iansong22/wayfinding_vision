@@ -29,7 +29,7 @@ class DrSpaamROS(Node):
         """
         @brief      Reads parameters from ROS server.
         """
-        self.weight_file = "/home/hcal/iansong2/wayfinding_vision/ros2_dr_spaam/models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth"  # Default weight file
+        self.weight_file = "/home/isong/Desktop/wayfinding_people_tracking/wayfinding_vision/ros2_dr_spaam/models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth"  # Default weight file
         self.conf_thresh = 0.8  # Default confidence threshold
         self.stride = 1  # Default stride
         self.detector_model = "DR-SPAAM"  # Default detector model
@@ -87,6 +87,10 @@ class DrSpaamROS(Node):
         # confidence threshold
         conf_mask = (dets_cls >= self.conf_thresh).reshape(-1)
         dets_xy = dets_xy[conf_mask]
+        # self.get_logger().info(
+        #     f"[DrSpaamROS] Detected {dets_xy}"
+        # )
+
         dets_cls = dets_cls[conf_mask]
 
         # convert to ros msg and publish
