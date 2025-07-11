@@ -58,8 +58,8 @@ def create_bbox3d_array(bboxes3d, frame_id, timestamp):
     :return: MarkerArray containing all bounding boxes.
     """
     marker_array = MarkerArray()
-    for i, (x, y, z, width, height, depth) in enumerate(bboxes3d):
-        marker = create_bbox3d(x, y, z, width, height, depth, frame_id, timestamp)
+    for i, bbox_3d in enumerate(bboxes3d):
+        marker = create_bbox3d(bbox_3d, frame_id, timestamp)
         marker.id = i  # Unique ID for each marker
         marker_array.markers.append(marker)
     return marker_array
