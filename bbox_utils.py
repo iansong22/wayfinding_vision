@@ -1,6 +1,8 @@
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 import cv2
+import open3d as o3d
+import numpy as np
 
 def create_bbox3d(bbox, frame_id, timestamp):
     """
@@ -49,7 +51,7 @@ def create_bbox3d(bbox, frame_id, timestamp):
     
     return marker
 
-def create_bbox3d_array(bboxes3d, frame_id, timestamp):
+def create_bbox3d_array(bboxes3d, frame_id, timestamp, num_prev=0):
     """
     Create a MarkerArray containing bounding boxes.
     :param bboxes: List of bounding boxes, each defined as (x, y, z, width, height, depth).
@@ -58,10 +60,21 @@ def create_bbox3d_array(bboxes3d, frame_id, timestamp):
     :return: MarkerArray containing all bounding boxes.
     """
     marker_array = MarkerArray()
-    for i, bbox_3d in enumerate(bboxes3d):
-        marker = create_bbox3d(bbox_3d, frame_id, timestamp)
-        marker.id = i  # Unique ID for each marker
-        marker_array.markers.append(marker)
+    for i in range(max(num_prev, len(bboxes3d))):
+        if i < len(bboxes3d):
+            bbox_3d = bboxes3d[i]
+            marker = create_bbox3d(bbox_3d, frame_id, timestamp)
+            marker.id = i  # Unique ID for each marker
+            marker_array.markers.append(marker)
+        else: # remove previous markers if they exist
+            # Create a marker with DELETE action to remove it
+            marker = Marker()
+            marker.action = Marker.DELETE
+            marker.ns = "wayfinding"
+            marker.id = i  # Unique ID for each marker
+            marker.header.frame_id = frame_id
+            marker.header.stamp = timestamp
+            marker_array.markers.append(marker)
     return marker_array
 
 def draw_bbox(img, bboxes):
@@ -87,3 +100,92 @@ def bbox_3d_to_2d(bbox):
     x2 = int(x + width)
     y2 = int(y + height)
     return (x1, y1, x2, y2)
+
+def add_box(image, box, color=(0, 0, 255), thickness=2):
+    x1, y1, x2, y2 = map(int, box)
+    cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
+    return image
+
+def detections_to_rviz_marker(dets_xy):
+    """
+    @brief     Convert detection to RViz marker msg. Each detection is marked as
+               a circle approximated by line segments.
+    """
+    msg = Marker()
+    msg.action = Marker.ADD
+    msg.ns = "yolo_ros"
+    msg.id = 0
+    msg.type = Marker.LINE_LIST
+
+    # set quaternion so that RViz does not give warning
+    msg.pose.orientation.x = 0.0
+    msg.pose.orientation.y = 0.0
+    msg.pose.orientation.z = 0.0
+    msg.pose.orientation.w = 1.0
+
+    msg.scale.x = 0.03  # line width
+    # blue color
+    msg.color.b = 1.0
+    msg.color.a = 1.0
+
+    # circle
+    r = 0.4
+    ang = np.linspace(0, 2 * np.pi, 20)
+    xy_offsets = r * np.stack((np.cos(ang), np.sin(ang)), axis=1)
+
+    # to msg
+    for d_xy in dets_xy:
+        for i in range(len(xy_offsets) - 1):
+            # note, y is up/down so set to 0
+            # start point of a segment
+            p0 = Point()
+            p0.x = float(d_xy[0] + xy_offsets[i, 0])
+            p0.y = 0.0
+            p0.z = float(d_xy[1] + xy_offsets[i, 1])
+            msg.points.append(p0)
+
+            # end point
+            p1 = Point()
+            p1.x = float(d_xy[0] + xy_offsets[i + 1, 0])
+            p1.y = 0.0
+            p1.z = float(d_xy[1] + xy_offsets[i + 1, 1])
+            msg.points.append(p1)
+
+    return msg
+
+def depth2PointCloud(depth, rgb, depth_scale, clip_distance_max, mask, intrinsics, voxel_size=0.01):
+    [fx, fy, cx, cy] = intrinsics
+    depth = depth * depth_scale # 1000 mm => 0.001 meters
+    rows,cols  = depth.shape
+
+    c, r = np.meshgrid(np.arange(cols), np.arange(rows), sparse=True)
+    r = r.astype(float)
+    c = c.astype(float)
+    z = depth 
+    x =  z * (c - cx) / fx
+    y =  z * (r - cy) / fy
+
+    depth = depth[np.where(mask>0)]
+
+    valid = (depth > 0) & (depth < clip_distance_max)
+    valid = np.ravel(valid)
+    
+    z = np.ravel(z[np.where(mask>0)])[valid]
+    x = np.ravel(x[np.where(mask>0)])[valid]
+    y = np.ravel(y[np.where(mask>0)])[valid]
+    
+    r = np.ravel(rgb[:,:,2][np.where(mask>0)])[valid]
+    g = np.ravel(rgb[:,:,1][np.where(mask>0)])[valid]
+    b = np.ravel(rgb[:,:,0][np.where(mask>0)])[valid]
+    
+    pointsxyzrgb = np.dstack((x, y, z, r, g, b))
+    pointsxyzrgb = pointsxyzrgb.reshape(-1,6)
+
+    pc = o3d.geometry.PointCloud()
+    pc.points = o3d.utility.Vector3dVector(pointsxyzrgb[:,:3])
+    if(pointsxyzrgb.shape[1]>3):
+        rgb_t = pointsxyzrgb[:,3:]
+        pc.colors = o3d.utility.Vector3dVector(rgb_t.astype(float) / 255.0)
+    pc = pc.voxel_down_sample(voxel_size=voxel_size)
+
+    return pc

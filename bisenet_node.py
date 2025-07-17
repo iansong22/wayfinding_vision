@@ -13,18 +13,15 @@ from builtin_interfaces.msg import Time
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Float32MultiArray
 from bbox_utils import create_bbox3d_array, depth2PointCloud, detections_to_rviz_marker, add_box
-import open3d as o3d
 
-from ultralytics import YOLO
-from ultralytics.utils import YAML
-from ultralytics.utils.checks import check_yaml
+import torch
+from BiSeNet.lib.models import model_factory
+import BiSeNet.lib.data.transform_cv2 as T
+from BiSeNet.configs import set_cfg_from_file
 
-CLASSES = YAML.load(check_yaml("coco8.yaml"))["names"]
-from geometry_msgs.msg import Point
-
-class WayfindingYOLONode(Node):
+class WayfindingBisenetNode(Node):
     def __init__(self, namespace, rotate=False, readCameraInfo=True):
-        super().__init__('wayfinding_yolo_node')
+        super().__init__('wayfinding_bisenet_node')
         self.rotate = rotate
         self.params = [302.86871337890625, 302.78631591796875, 212.50067138671875, 125.79319763183594]
         self.description_sub = self.create_subscription(
@@ -50,16 +47,20 @@ class WayfindingYOLONode(Node):
             self.image_callback,
             10)
         self.image_subscription # prevent unused variable warning
-        self.bboximage_pub = self.create_publisher(Image, namespace + '/yolo/image', 10)
-        self.rviz_pub = self.create_publisher(Marker, namespace + '/yolo/rviz', 10)
-        self.rviz_bbox3d_pub = self.create_publisher(MarkerArray, namespace + '/yolo/rviz_bbox3d', 10)
-        self.bbox3d_pub = self.create_publisher(Float32MultiArray, namespace + '/yolo/bbox3d', 10)
-        self.prev_bbox3dlen = 0
+        self.bboximage_pub = self.create_publisher(Image, namespace + '/bisenet/image', 10)
+        self.rviz_pub = self.create_publisher(Marker, namespace + '/bisenet/rviz', 10)
+        self.rviz_bbox3d_pub = self.create_publisher(MarkerArray, namespace + '/bisenet/rviz_bbox3d', 10)
+        self.bbox3d_pub = self.create_publisher(Float32MultiArray, namespace + '/bisenet/bbox3d', 10)
 
         self.bridge = CvBridge()
-        self.model = YOLO('yolov8m-seg.pt')
+        cfg = set_cfg_from_file(args.config)
 
-        self.get_logger().info(f"Initialized WayfindingYOLONode with namespace: {namespace}")
+        # define model
+        net = model_factory[cfg.model_type](cfg.n_cats, aux_mode='eval')
+        net.load_state_dict(torch.load(args.weight_path, map_location='cpu'), strict=False)
+        net.eval()
+
+        self.get_logger().info(f"Initialized WayfindingBisenetNode with namespace: {namespace}")
 
     def camera_info_callback(self, camera_info_msg):
         if not self.readCameraInfo:
@@ -112,9 +113,7 @@ class WayfindingYOLONode(Node):
         dets_msg.header.stamp = timestamp
         dets_msg.header.frame_id = self.frame_id
         self.rviz_pub.publish(dets_msg)
-        bboxes3d_msg = create_bbox3d_array(bboxes3d, self.frame_id, timestamp, num_prev=self.prev_bbox3dlen)
-        self.prev_bbox3dlen = len(bboxes3d)
-        self.rviz_bbox3d_pub.publish(bboxes3d_msg)
+        self.rviz_bbox3d_pub.publish(create_bbox3d_array(bboxes3d, self.frame_id, timestamp))
         if len(humans) > 0:
             self.get_logger().info(f"Published {len(bboxes3d)} 3D bounding boxes")
             self.get_logger().info(f"Total Processing Time: {time.time() - func_start:.4f} seconds")
@@ -128,9 +127,14 @@ class WayfindingYOLONode(Node):
         if rotate:
             color_img = cv2.rotate(color_img, cv2.ROTATE_90_CLOCKWISE)
             image_height, image_width = color_img.shape[:2]
-        yolo_start = time.time()
+        
         results = self.model(color_img, verbose=False)
-        # self.get_logger().info(f"YOLO inference took {time.time() - yolo_start:.2f} seconds")
+
+        # prepare data
+        to_tensor = T.ToTensor(
+            mean=(0.3257, 0.3690, 0.3223), # city, rgb
+            std=(0.2112, 0.2148, 0.2115),
+        )
 
         humans = []
         # Iterate through NMS results to draw bounding boxes and labels
@@ -198,7 +202,7 @@ class WayfindingYOLONode(Node):
 def main(namespace, rotate, args=None):
     rclpy.init(args=args)
 
-    node = WayfindingYOLONode(namespace=namespace, rotate=rotate)
+    node = WayfindingBisenetNode(namespace=namespace, rotate=rotate)
 
     rclpy.spin(node)
 
