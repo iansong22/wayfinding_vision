@@ -12,18 +12,20 @@ from sensor_msgs.msg import Image, CameraInfo
 from builtin_interfaces.msg import Time
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Float32MultiArray
-from bbox_utils import create_bbox3d_array, depth2PointCloud, detections_to_rviz_marker, add_box
-import open3d as o3d
+import tf2_ros
+from geometry_msgs.msg import PointStamped, TransformStamped, PoseArray
+from tf2_geometry_msgs import do_transform_point
+
+from bbox_utils import create_bbox3d_array, depth2PointCloud, detections_to_rviz_marker, detections_to_pose_array, add_box
 
 from ultralytics import YOLO
 from ultralytics.utils import YAML
 from ultralytics.utils.checks import check_yaml
 
 CLASSES = YAML.load(check_yaml("coco8.yaml"))["names"]
-from geometry_msgs.msg import Point
 
 class WayfindingYOLONode(Node):
-    def __init__(self, namespace, rotate=False, readCameraInfo=True):
+    def __init__(self, namespace, rotate=False, readCameraInfo=True, base_id='laser'):
         super().__init__('wayfinding_yolo_node')
         self.rotate = rotate
         self.params = [302.86871337890625, 302.78631591796875, 212.50067138671875, 125.79319763183594]
@@ -35,7 +37,13 @@ class WayfindingYOLONode(Node):
         self.readCameraInfo = readCameraInfo
 
         self.frame_id = 'camera_link'
+        self.base_id = base_id
         self.depth_scale = 0.001  # Assuming depth is in mm, convert to meters
+
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self.latest_transform = None
+        self.timer = self.create_timer(0.02, self.lookup_latest_transform)
 
         self.image_dict = defaultdict(lambda : [None, None])  # Dictionary to hold (color_image, depth_image) pairs
         self.depth_subscription = self.create_subscription(
@@ -53,7 +61,7 @@ class WayfindingYOLONode(Node):
         self.bboximage_pub = self.create_publisher(Image, namespace + '/yolo/image', 10)
         self.rviz_pub = self.create_publisher(Marker, namespace + '/yolo/rviz', 10)
         self.rviz_bbox3d_pub = self.create_publisher(MarkerArray, namespace + '/yolo/rviz_bbox3d', 10)
-        self.bbox3d_pub = self.create_publisher(Float32MultiArray, namespace + '/yolo/bbox3d', 10)
+        self.posearray_pub = self.create_publisher(PoseArray, namespace + '/yolo/detections', 10)
         self.prev_bbox3dlen = 0
 
         self.bridge = CvBridge()
@@ -106,12 +114,11 @@ class WayfindingYOLONode(Node):
         # Publish rviz markers
         centers, bboxes3d = self.process_human_points(color_img, depth_img, humans)
 
-        self.bbox3d_pub.publish(Float32MultiArray(data=np.array(bboxes3d).flatten().tolist()))
+        self.posearray_pub.publish(detections_to_pose_array(centers, timestamp, self.base_id))
 
-        dets_msg = detections_to_rviz_marker(centers)
-        dets_msg.header.stamp = timestamp
-        dets_msg.header.frame_id = self.frame_id
+        dets_msg = detections_to_rviz_marker(centers, timestamp, self.base_id)
         self.rviz_pub.publish(dets_msg)
+
         bboxes3d_msg = create_bbox3d_array(bboxes3d, self.frame_id, timestamp, num_prev=self.prev_bbox3dlen)
         self.prev_bbox3dlen = len(bboxes3d)
         self.rviz_bbox3d_pub.publish(bboxes3d_msg)
@@ -128,11 +135,20 @@ class WayfindingYOLONode(Node):
         if rotate:
             color_img = cv2.rotate(color_img, cv2.ROTATE_90_CLOCKWISE)
             image_height, image_width = color_img.shape[:2]
+
         yolo_start = time.time()
         results = self.model(color_img, verbose=False)
-        # self.get_logger().info(f"YOLO inference took {time.time() - yolo_start:.2f} seconds")
+        self.get_logger().info(f"YOLO inference took {time.time() - yolo_start:.4f} seconds")
+
+        if rotate:
+            # Rotate the color image back to its original orientation
+            color_img = cv2.rotate(color_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
         humans = []
+        if len(results) == 0 or len(results[0].masks) == 0:
+            self.get_logger().info("No detections found")
+            return color_img, humans
+            
         # Iterate through NMS results to draw bounding boxes and labels
         for mask, box in zip(results[0].masks.xy, results[0].boxes):
             if CLASSES[int(box.cls[0].item())].lower() not in ['person']:
@@ -145,10 +161,6 @@ class WayfindingYOLONode(Node):
                 bbox[0], bbox[1] = bbox[1], image_width-1-bbox[0]
                 bbox[2], bbox[3] = bbox[3], image_width-1-bbox[2]
             humans.append((mask, bbox))
-
-        if rotate:
-            # Rotate the color image back to its original orientation
-            color_img = cv2.rotate(color_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
         if len(humans) > 0:
             self.get_logger().info(f"{len(humans)} found: {[box for (mask, box) in humans]}")
@@ -187,19 +199,43 @@ class WayfindingYOLONode(Node):
             
             # Compute the bounding box of the point cloud
             x,y,z = pointcloud.get_center()
-            centers.append([x,z])
+            
+            point = PointStamped()
+            point.point.x = x
+            point.point.y = y
+            point.point.z = z
+            self.get_logger().info(f"Point before transform: {point.point.x}, {point.point.y}, {point.point.z}")
+            if self.latest_transform is not None:
+                point = do_transform_point(point, self.latest_transform)
+                self.get_logger().info(f"Transformed point: {point.point.x}, {point.point.y}, {point.point.z}")
+            centers.append([point.point.x, point.point.y])
+
             x_min, y_min, z_min = pointcloud.get_min_bound()
             x_max, y_max, z_max = pointcloud.get_max_bound()
             bboxes3d.append([x_min, y_min, z_min, x_max, y_max, z_max])
             self.get_logger().info(f"bbox3d: {x_min, y_min, z_min, x_max, y_max, z_max}, center: {x, y, z}")
 
         return centers, bboxes3d
+    
+    def lookup_latest_transform(self):
+        try:
+            # Use time=0 to get the latest available transform
+            transform: TransformStamped = self.tf_buffer.lookup_transform(
+                source_frame=self.frame_id,
+                target_frame=self.base_id,
+                time=Time(),
+                timeout=rclpy.duration.Duration(seconds=0.5)
+            )
+            self.latest_transform = transform
+            # self.get_logger().info(f"Cached latest transform:\n{transform}")
+        except Exception as e:
+            # self.get_logger().warn(f"Transform unavailable: {e}")
+            return
 
-def main(namespace, rotate, args=None):
+def main(namespace, rotate, base_id, args=None):
     rclpy.init(args=args)
 
-    node = WayfindingYOLONode(namespace=namespace, rotate=rotate)
-
+    node = WayfindingYOLONode(namespace=namespace, rotate=rotate, base_id=base_id)
     rclpy.spin(node)
 
     # Destroy the node explicitly
@@ -215,7 +251,10 @@ if __name__ == '__main__':
                         help='Namespace for the camera topic')
     parser.add_argument('--rotate', action='store_true', default=False,
                         help='Rotate the input image 90 degrees clockwise before processing')
+    parser.add_argument('--base_id', type=str, default='laser',
+                        help='Base frame ID for the transform')
     args = parser.parse_args()
     namespace = args.namespace
     rotate = args.rotate
-    main(namespace=namespace, rotate=rotate)
+    base_id = args.base_id
+    main(namespace=namespace, rotate=rotate, base_id=base_id)

@@ -1,6 +1,9 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray
+from geometry_msgs.msg import PoseArray
+from visualization_msgs.msg import Marker
+from bbox_utils import detections_to_rviz_marker
+
 import numpy as np
 
 from kalman.model import AB3DMOT as tracker
@@ -10,23 +13,75 @@ class KalmanTrackingNode(Node):
         super().__init__('kalman_tracking_node')
         self.get_logger().info("Initializing Kalman Tracking Node")
         self.bbox_subscription = self.create_subscription(
-            Float32MultiArray,
-            namespace + '/yolo/bbox3d',
+            PoseArray,
+            namespace + '/yolo/detections',
             self.box_callback,
             10)
         self.bbox_subscription # prevent unused variable warning
-        self.tracker = tracker()
-    def box_callback(self, bboxes_msg):
-        # boxes are in form [x_min, y_min, z_min, x_max, y_max, z_max]
-        bboxes = np.array(bboxes_msg.data).reshape(-1, 6)
-        self.get_logger().info(f"Received {len(bboxes)} bounding boxes")
-        if len(bboxes) > 0:
-            # Process the bounding boxes with the tracker
-            dets = [{"dets": box, "info": {}} for box in bboxes]
-            processed_boxes = self.tracker.track(dets)
-            self.get_logger().info(f"Processed {len(processed_boxes)} bounding boxes")
-            self.get_logger().info(f"Processed boxes: {processed_boxes}")
+        self.bbox_publisher = self.create_publisher(
+            Marker,
+            namespace + '/kalman/tracked_boxes',
+            10)
+        self.tracker = tracker(output_preds=True)
+        self.colors = [
+            [0.5, 0.0, 0.5],
+            [0.0, 0.0, 0.5],
+            [0.0, 0.5, 0.0],
+            [0.5, 0.0, 0.0],
+            [0.5, 0.5, 0.0],
+            [0.0, 0.5, 0.5],
+            [0.5, 0.25, 0.0],
+        ]
+        self.generate_new_colors = True
+    def box_callback(self, poses_msg):
+        # poses are in form [x, y, z, radius]
+        # tracker requires [h,w,l,x,y,z,theta]
+        r = 0.4
+        X_IDX = 3
+        Z_IDX = 5
+        ID_IDX = 7
+        boxes = np.array([[
+            r,
+            r,
+            r,
+            p.position.x,
+            p.position.y,
+            p.position.z,
+            0
+        ] for p in poses_msg.poses])
+        self.get_logger().info(f"Received {len(boxes)} boxes")
+        dets = {"dets": [box for box in boxes], "info": [None for _ in boxes]}
 
+        processed_boxes, preds = self.tracker.track(dets)
+
+        if len(processed_boxes) > 0:
+            # Process the bounding boxes with the tracker
+            self.get_logger().info(f"Processed {len(processed_boxes)} bounding boxes")
+            
+            boxes = []
+            colors = []
+            for box in processed_boxes:
+                # box is in the format [h, w, l, x, y, z, theta]
+                boxes.append([box[X_IDX], box[Z_IDX]])
+                idx = int(box[ID_IDX])
+                if len(self.colors) > idx:
+                    color = self.colors[idx]
+                elif self.generate_new_colors:
+                    color = [np.random.rand() for _ in range(3)]
+                    self.colors.append(color)
+                else:
+                    color = self.colors[idx % len(self.colors)]
+                colors.append(color)
+
+            # Convert processed boxes to PoseArray for publishing
+            rviz_marker = detections_to_rviz_marker(
+                boxes, poses_msg.header.stamp, poses_msg.header.frame_id, colors=colors)
+        else:
+            self.get_logger().info("No boxes processed")
+            rviz_marker = detections_to_rviz_marker([], poses_msg.header.stamp, poses_msg.header.frame_id)
+
+        self.bbox_publisher.publish(rviz_marker)
+                
 def main(namespace="camera",args=None):
     rclpy.init(args=args)
 

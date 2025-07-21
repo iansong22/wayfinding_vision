@@ -61,6 +61,7 @@ class AB3DMOT(object):
 		# get predicted locations from existing tracks
 
 		trks = []
+		trks_ids = []
 		infos = []
 		for t in range(len(self.trackers)):
 			
@@ -84,9 +85,10 @@ class AB3DMOT(object):
 			kf_tmp.time_since_update += 1 		
 			trk_tmp = kf_tmp.kf.x.reshape((-1))[:7]
 			trks.append(Box3D.array2bbox(trk_tmp))
+			trks_ids.append(kf_tmp.id)
 			infos.append(kf_tmp.info)
 
-		return trks, infos
+		return trks, trks_ids, infos
 
 	def update(self, matched, unmatched_trks, dets, info):
 		# update matched trackers with assigned detections
@@ -187,7 +189,7 @@ class AB3DMOT(object):
 		dets = self.process_dets(dets)
 
 		# tracks propagation based on velocity
-		trks, trk_info = self.prediction()
+		trks, trks_ids, trk_info = self.prediction()
    
 		# matching
 		trk_innovation_matrix = None
@@ -204,10 +206,13 @@ class AB3DMOT(object):
 
 		# output existing valid tracks
 		results = self.output()
-		if len(results) > 0: results = np.concatenate(results)		# h,w,l,x,y,z,theta, ID, other info, confidence
+		if len(results) > 0: results = np.concatenate(results)		# h,w,l,x,y,z,theta, ID, other info
 		else:            	 results = np.empty((0, 15))
 		self.id_now_output = results[:, 7].tolist()					# only the active tracks that are outputed
 		if self.output_preds:
-			preds = [[Box3D.bbox2array_raw(trk), self.trackers[i].id] for i, trk in enumerate(trks)]
+			preds = []
+			for i, trk in enumerate(trks):
+				pred = [Box3D.bbox2array_raw(trk), trks_ids[i], trk_info[i]]
+				preds.append(pred)
 			return results, preds
 		return results, affi

@@ -82,7 +82,7 @@ def data_association(dets, trks, metric, threshold, algm='greedy', \
 		trk_inv_inn_matrices = None
 
 	# compute affinity matrix
-	aff_matrix = compute_affinity(dets, trks, metric, trk_inv_inn_matrices, info, trk_info)
+	aff_matrix = compute_affinity(dets, trks, metric, trk_inv_inn_matrices)
 
 	# association based on the affinity matrix
 	if algm == 'hungar':

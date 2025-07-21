@@ -1,5 +1,5 @@
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, Pose, PoseArray
 import cv2
 import open3d as o3d
 import numpy as np
@@ -106,12 +106,20 @@ def add_box(image, box, color=(0, 0, 255), thickness=2):
     cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
     return image
 
-def detections_to_rviz_marker(dets_xy):
+def detections_to_rviz_marker(dets_xy, timestamp, frame_id, colors=None):
     """
     @brief     Convert detection to RViz marker msg. Each detection is marked as
                a circle approximated by line segments.
+    :param dets_xy: List of detections, each detection is a tuple (x, y).
+    :param timestamp: Timestamp for the marker.
+    :param frame_id: Frame ID for the marker.
+    :param colors: Optional list of colors for each detection.  If None, blue will be used.
+    :return msg: Marker message for RViz visualization.
+    
     """
     msg = Marker()
+    msg.header.frame_id = frame_id
+    msg.header.stamp = timestamp
     msg.action = Marker.ADD
     msg.ns = "yolo_ros"
     msg.id = 0
@@ -124,7 +132,8 @@ def detections_to_rviz_marker(dets_xy):
     msg.pose.orientation.w = 1.0
 
     msg.scale.x = 0.03  # line width
-    # blue color
+    msg.color.r = 0.0
+    msg.color.g = 0.0
     msg.color.b = 1.0
     msg.color.a = 1.0
 
@@ -134,24 +143,44 @@ def detections_to_rviz_marker(dets_xy):
     xy_offsets = r * np.stack((np.cos(ang), np.sin(ang)), axis=1)
 
     # to msg
-    for d_xy in dets_xy:
+    for d_idx, d_xy in enumerate(dets_xy):
         for i in range(len(xy_offsets) - 1):
+            if colors is not None:
+                color = colors[d_idx % len(colors)]
+                msg.color.r = color[0]
+                msg.color.g = color[1]
+                msg.color.b = color[2]
             # note, y is up/down so set to 0
             # start point of a segment
             p0 = Point()
             p0.x = float(d_xy[0] + xy_offsets[i, 0])
-            p0.y = 0.0
-            p0.z = float(d_xy[1] + xy_offsets[i, 1])
+            p0.z = 0.0
+            p0.y = float(d_xy[1] + xy_offsets[i, 1])
             msg.points.append(p0)
 
             # end point
             p1 = Point()
             p1.x = float(d_xy[0] + xy_offsets[i + 1, 0])
-            p1.y = 0.0
-            p1.z = float(d_xy[1] + xy_offsets[i + 1, 1])
+            p1.z = 0.0
+            p1.y = float(d_xy[1] + xy_offsets[i + 1, 1])
             msg.points.append(p1)
 
     return msg
+
+def detections_to_pose_array(dets_xy, timestamp, frame_id):
+    pose_array = PoseArray()
+    pose_array.header.stamp = timestamp
+    pose_array.header.frame_id = frame_id
+    for d_xy in dets_xy:
+        # Detector uses following frame convention:
+        # x forward, y rightward, z downward, phi is angle w.r.t. x-axis
+        p = Pose()
+        p.position.x = float(d_xy[0])
+        p.position.y = float(d_xy[1])
+        p.position.z = 0.0
+        pose_array.poses.append(p)
+
+    return pose_array
 
 def depth2PointCloud(depth, rgb, depth_scale, clip_distance_max, mask, intrinsics, voxel_size=0.01):
     [fx, fy, cx, cy] = intrinsics

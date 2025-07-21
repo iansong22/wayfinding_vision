@@ -1,4 +1,5 @@
 # import time
+import time
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -80,15 +81,15 @@ class DrSpaamROS(Node):
         scan[np.isinf(scan)] = 29.99
         scan[np.isnan(scan)] = 29.99
 
-        # t = time.time()
+        t = time.time()
         dets_xy, dets_cls, _ = self._detector(scan)
-        # print("[DrSpaamROS] End-to-end inference time: %f" % (t - time.time()))
+        self.get_logger().info(f"End-to-end inference time: {time.time() - t:.4f}s")
 
         # confidence threshold
         conf_mask = (dets_cls >= self.conf_thresh).reshape(-1)
         dets_xy = dets_xy[conf_mask]
         # self.get_logger().info(
-        #     f"[DrSpaamROS] Detected {dets_xy}"
+        #     f"Detected {dets_xy}"
         # )
 
         dets_cls = dets_cls[conf_mask]

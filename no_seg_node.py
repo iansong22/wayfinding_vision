@@ -11,11 +11,10 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image, CameraInfo
 from builtin_interfaces.msg import Time
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import Float32MultiArray
-from bbox_utils import create_bbox3d_array, depth2PointCloud, detections_to_rviz_marker, add_box
+from bbox_utils import create_bbox3d_array, depth2PointCloud, detections_to_pose_array, detections_to_rviz_marker, add_box
 import open3d as o3d
 import tf2_ros
-from geometry_msgs.msg import PointStamped, TransformStamped
+from geometry_msgs.msg import PointStamped, TransformStamped, PoseArray
 from tf2_geometry_msgs import do_transform_point
 
 from ultralytics import YOLO
@@ -64,7 +63,7 @@ class WayfindingTrackingNode(Node):
         self.bboximage_pub = self.create_publisher(Image, namespace + '/yolo/image', 10)
         self.rviz_pub = self.create_publisher(Marker, namespace + '/yolo/rviz', 10)
         self.rviz_bbox3d_pub = self.create_publisher(MarkerArray, namespace + '/yolo/rviz_bbox3d', 10)
-        self.bbox3d_pub = self.create_publisher(Float32MultiArray, namespace + '/yolo/bbox3d', 10)
+        self.posearray_pub = self.create_publisher(PoseArray, namespace + '/yolo/detections', 10)
         self.prev_bbox3dlen = 0
 
         self.bridge = CvBridge()
@@ -118,12 +117,11 @@ class WayfindingTrackingNode(Node):
         # Publish rviz markers
         centers, bboxes3d = self.process_human_points(color_img, depth_img, humans, timestamp)
 
-        self.bbox3d_pub.publish(Float32MultiArray(data=np.array(bboxes3d).flatten().tolist()))
+        self.posearray_pub.publish(detections_to_pose_array(centers, timestamp, self.base_id))
 
-        dets_msg = detections_to_rviz_marker(centers)
-        dets_msg.header.stamp = timestamp
-        dets_msg.header.frame_id = "base_link"
+        dets_msg = detections_to_rviz_marker(centers, timestamp, self.base_id)
         self.rviz_pub.publish(dets_msg)
+
         bboxes3d_msg = create_bbox3d_array(bboxes3d, self.frame_id, timestamp, num_prev=self.prev_bbox3dlen)
         self.prev_bbox3dlen = len(bboxes3d)
         self.rviz_bbox3d_pub.publish(bboxes3d_msg)
@@ -140,14 +138,15 @@ class WayfindingTrackingNode(Node):
         if rotate:
             color_img = cv2.rotate(color_img, cv2.ROTATE_90_CLOCKWISE)
             image_height, image_width = color_img.shape[:2]
-        yolo_start = time.time()
+        # yolo_start = time.time()
         results = self.model(color_img, verbose=False)
         # self.get_logger().info(f"YOLO inference took {time.time() - yolo_start:.2f} seconds")
+        if rotate:
+            # Rotate the color image back to its original orientation
+            color_img = cv2.rotate(color_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
         if len(results) == 0 or len(results[0].boxes) == 0:
             self.get_logger().info("No detections found")
-            if rotate:
-                # Rotate the color image back to its original orientation
-                color_img = cv2.rotate(color_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
             return color_img, []
         humans = []
         # Iterate through NMS results to draw bounding boxes and labels
@@ -159,10 +158,6 @@ class WayfindingTrackingNode(Node):
                 # Rotate the points of the bounding box counterclockwise
                 bbox[0], bbox[1], bbox[2], bbox[3] = bbox[1], image_width-1-bbox[2], bbox[3], image_width-1-bbox[0]
             humans.append(bbox)
-
-        if rotate:
-            # Rotate the color image back to its original orientation
-            color_img = cv2.rotate(color_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
         if len(humans) > 0:
             self.get_logger().info(f"{len(humans)} found: {[box for box in humans]}")
@@ -265,7 +260,7 @@ if __name__ == '__main__':
                         help='Namespace for the camera topic')
     parser.add_argument('--rotate', action='store_true', default=False,
                         help='Rotate the input image 90 degrees clockwise before processing')
-    parser.add_argument('--base_id', type=str, default='base_link',
+    parser.add_argument('--base_id', type=str, default='laser',
                         help='Base frame ID for the transform')
     args = parser.parse_args()
     namespace = args.namespace
