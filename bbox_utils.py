@@ -106,13 +106,31 @@ def add_box(image, box, color=(0, 0, 255), thickness=2):
     cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
     return image
 
-def detections_to_rviz_marker(dets_xy, timestamp, frame_id, colors=None):
+def detections_to_rviz_marker_array(dets_xy, timestamp, frame_id, colors=None):
+    """
+    Convert detections to RViz marker array. Each detection is marked as a circle approximated by line segments.
+    :param dets_xy: List of detections, each detection is a tuple (x, y).
+    :param timestamp: Timestamp for the marker.
+    :param frame_id: Frame ID for the marker.
+    :param colors: Optional list of colors for each detection. If None, blue will be used.
+    :return msg: Marker message for RViz visualization.
+    """
+    msg = MarkerArray()
+    
+    for d_idx, d_xy in enumerate(dets_xy):
+        marker = detections_to_rviz_marker([d_xy], timestamp, frame_id, marker_id=d_idx, color=colors[d_idx % len(colors)] if colors else None)
+        msg.markers.append(marker)
+    
+    return msg
+
+def detections_to_rviz_marker(dets_xy, timestamp, frame_id, marker_id=0, color=None):
     """
     @brief     Convert detection to RViz marker msg. Each detection is marked as
                a circle approximated by line segments.
     :param dets_xy: List of detections, each detection is a tuple (x, y).
     :param timestamp: Timestamp for the marker.
     :param frame_id: Frame ID for the marker.
+    ;:param marker_id: Unique ID for the marker.
     :param colors: Optional list of colors for each detection.  If None, blue will be used.
     :return msg: Marker message for RViz visualization.
     
@@ -122,7 +140,7 @@ def detections_to_rviz_marker(dets_xy, timestamp, frame_id, colors=None):
     msg.header.stamp = timestamp
     msg.action = Marker.ADD
     msg.ns = "yolo_ros"
-    msg.id = 0
+    msg.id = marker_id
     msg.type = Marker.LINE_LIST
 
     # set quaternion so that RViz does not give warning
@@ -135,6 +153,10 @@ def detections_to_rviz_marker(dets_xy, timestamp, frame_id, colors=None):
     msg.color.r = 0.0
     msg.color.g = 0.0
     msg.color.b = 1.0
+    if color is not None:
+        msg.color.r = color[0]
+        msg.color.g = color[1]
+        msg.color.b = color[2]
     msg.color.a = 1.0
 
     # circle
@@ -143,13 +165,8 @@ def detections_to_rviz_marker(dets_xy, timestamp, frame_id, colors=None):
     xy_offsets = r * np.stack((np.cos(ang), np.sin(ang)), axis=1)
 
     # to msg
-    for d_idx, d_xy in enumerate(dets_xy):
+    for d_xy in dets_xy:
         for i in range(len(xy_offsets) - 1):
-            if colors is not None:
-                color = colors[d_idx % len(colors)]
-                msg.color.r = color[0]
-                msg.color.g = color[1]
-                msg.color.b = color[2]
             # note, y is up/down so set to 0
             # start point of a segment
             p0 = Point()

@@ -1,8 +1,8 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseArray
-from visualization_msgs.msg import Marker
-from bbox_utils import detections_to_rviz_marker
+from visualization_msgs.msg import Marker, MarkerArray
+from bbox_utils import detections_to_rviz_marker_array
 
 import numpy as np
 
@@ -19,10 +19,10 @@ class KalmanTrackingNode(Node):
             10)
         self.bbox_subscription # prevent unused variable warning
         self.bbox_publisher = self.create_publisher(
-            Marker,
+            MarkerArray,
             namespace + '/kalman/tracked_boxes',
             10)
-        self.tracker = tracker(output_preds=True)
+        self.tracker = tracker(thres=0.2, output_preds=False)
         self.colors = [
             [0.5, 0.0, 0.5],
             [0.0, 0.0, 0.5],
@@ -33,11 +33,13 @@ class KalmanTrackingNode(Node):
             [0.5, 0.25, 0.0],
         ]
         self.generate_new_colors = True
+        self.previous_markers_len = 0
     def box_callback(self, poses_msg):
         # poses are in form [x, y, z, radius]
         # tracker requires [h,w,l,x,y,z,theta]
         r = 0.4
         X_IDX = 3
+        Y_IDX = 4
         Z_IDX = 5
         ID_IDX = 7
         boxes = np.array([[
@@ -49,20 +51,22 @@ class KalmanTrackingNode(Node):
             p.position.z,
             0
         ] for p in poses_msg.poses])
-        self.get_logger().info(f"Received {len(boxes)} boxes")
+        self.get_logger().info(f"Received {len(boxes)} boxes {boxes}")
         dets = {"dets": [box for box in boxes], "info": [None for _ in boxes]}
 
-        processed_boxes, preds = self.tracker.track(dets)
+        processed_boxes, affi = self.tracker.track(dets)
+
+        self.get_logger().info(f"affi: {affi}")
 
         if len(processed_boxes) > 0:
             # Process the bounding boxes with the tracker
-            self.get_logger().info(f"Processed {len(processed_boxes)} bounding boxes")
+            self.get_logger().info(f"Processed {len(processed_boxes)} bounding boxes: {processed_boxes}")
             
             boxes = []
             colors = []
             for box in processed_boxes:
                 # box is in the format [h, w, l, x, y, z, theta]
-                boxes.append([box[X_IDX], box[Z_IDX]])
+                boxes.append([box[X_IDX], box[Y_IDX]])
                 idx = int(box[ID_IDX])
                 if len(self.colors) > idx:
                     color = self.colors[idx]
@@ -74,11 +78,24 @@ class KalmanTrackingNode(Node):
                 colors.append(color)
 
             # Convert processed boxes to PoseArray for publishing
-            rviz_marker = detections_to_rviz_marker(
+            rviz_marker = detections_to_rviz_marker_array(
                 boxes, poses_msg.header.stamp, poses_msg.header.frame_id, colors=colors)
         else:
             self.get_logger().info("No boxes processed")
-            rviz_marker = detections_to_rviz_marker([], poses_msg.header.stamp, poses_msg.header.frame_id)
+            rviz_marker = detections_to_rviz_marker_array([], poses_msg.header.stamp, poses_msg.header.frame_id)
+        
+        # Add delete markers for previous boxes
+        markers_len = len(rviz_marker.markers)
+        if self.previous_markers_len > markers_len:
+            for i in range(markers_len, self.previous_markers_len):
+                delete_marker = Marker()
+                delete_marker.action = Marker.DELETE
+                delete_marker.ns = "yolo_ros"
+                delete_marker.id = i
+                delete_marker.header.frame_id = poses_msg.header.frame_id
+                delete_marker.header.stamp = poses_msg.header.stamp
+                rviz_marker.markers.append(delete_marker)
+        self.previous_markers_len = markers_len
 
         self.bbox_publisher.publish(rviz_marker)
                 
