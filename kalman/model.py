@@ -16,9 +16,8 @@ from kalman.kalman_filter import KF
 
 np.set_printoptions(suppress=True, precision=3)
 
-# A Baseline of 3D Multi-Object Tracking
-class AB3DMOT(object):			  	
-	def __init__(self, metric="giou_3d", algm = "greedy", thres=0.5, max_age = 5, min_hits = 1, ID_init=0, output_preds=False):             
+class Wayfinding_3DMOT(object):			  	
+	def __init__(self, metric="giou_3d", algm = "greedy", vis_thres=0.5, lidar_thres=0.5, max_age = 5, min_hits = 1, ID_init=0, output_preds=False):             
      
 		self.output_preds = output_preds
   
@@ -35,10 +34,10 @@ class AB3DMOT(object):
 	
 
 		# add negative due to it is the cost
-		if metric in ['dist_3d', 'dist_2d', 'm_dis']: thres *= -1	
-  
-		self.algm, self.metric, self.thres, self.max_age, self.min_hits = \
-			algm, metric, thres, max_age, min_hits
+		if metric in ['dist_3d', 'dist_2d', 'm_dis']: thres *= -1
+
+		self.algm, self.metric, self.vis_thres, self.lidar_thres, self.max_age, self.min_hits = \
+			algm, metric, vis_thres, lidar_thres, max_age, min_hits
 
 		# define max/min values for the output affinity matrix
 		if self.metric in ['dist_3d', 'dist_2d', 'm_dis']: self.max_sim, self.min_sim = 0.0, -100.
@@ -62,7 +61,6 @@ class AB3DMOT(object):
 
 		trks = []
 		trks_ids = []
-		infos = []
 		for t in range(len(self.trackers)):
 			
 			# propagate locations
@@ -86,17 +84,21 @@ class AB3DMOT(object):
 			trk_tmp = kf_tmp.kf.x.reshape((-1))[:7]
 			trks.append(Box3D.array2bbox(trk_tmp))
 			trks_ids.append(kf_tmp.id)
-			infos.append(kf_tmp.info)
 
-		return trks, trks_ids, infos
+		return trks, trks_ids
 
-	def update(self, matched, unmatched_trks, dets, info):
+	def update(self, matched, lidar_matched, unmatched_trks, dets, lidar_dets):
 		# update matched trackers with assigned detections
 		
 		dets = copy.copy(dets)
 		for t, trk in enumerate(self.trackers):
 			if t not in unmatched_trks:
+				lidar_det = False
 				d = matched[np.where(matched[:, 1] == t)[0], 0]     # a list of index
+				# check vision detections first, then lidar detections
+				if len(d) == 0:
+					d = lidar_matched[np.where(lidar_matched[:, 1] == t)[0], 0]
+					lidar_det = True
 				assert len(d) == 1, 'error'
 
 				# update statistics
@@ -104,7 +106,7 @@ class AB3DMOT(object):
 				trk.hits += 1
 
 				# update orientation in propagated tracks and detected boxes so that they are within 90 degree
-				bbox3d = Box3D.bbox2array(dets[d[0]])
+				bbox3d = Box3D.bbox2array(dets[d[0]]) if not lidar_det else Box3D.bbox2array(lidar_dets[d[0]])
 				# trk.kf.x[3], bbox3d[3] = self.orientation_correction(trk.kf.x[3], bbox3d[3])
 
 				if trk.id == self.debug_id:
@@ -123,19 +125,18 @@ class AB3DMOT(object):
 					print(trk.get_velocity())
 
 				# trk.kf.x[3] = self.within_range(trk.kf.x[3])
-				trk.info = info[d[0]]
 
 			# debug use only
 			# else:
 				# print('track ID %d is not matched' % trk.id)
 
-	def birth(self, dets, info, unmatched_dets):
+	def birth(self, dets, unmatched_dets):
 		# create and initialise new trackers for unmatched detections
 
 		# dets = copy.copy(dets)
 		new_id_list = list()					# new ID generated for unmatched detections
 		for i in unmatched_dets:        			# a scalar of index
-			trk = KF(Box3D.bbox2array(dets[i]), info[i], self.ID_count[0])
+			trk = KF(Box3D.bbox2array(dets[i]), self.ID_count[0])
 			self.trackers.append(trk)
 			new_id_list.append(trk.id)
 			# print('track ID %s has been initialized due to new detection' % trk.id)
@@ -156,7 +157,7 @@ class AB3DMOT(object):
 			d = Box3D.bbox2array_raw(d)
 
 			if ((trk.time_since_update < self.max_age) and (trk.hits >= self.min_hits or self.frame_count <= self.min_hits)):      
-				results.append(np.concatenate((d, np.array([trk.id]), np.array([trk.info]))).reshape(1, -1)) 		
+				results.append(np.concatenate((d, np.array([trk.id]))).reshape(1, -1)) 		
 			num_trks -= 1
 
 			# deadth, remove dead tracklet
@@ -165,19 +166,27 @@ class AB3DMOT(object):
 
 		return results
 
-	def track(self, dets_all, frame=0, seq_name=None):
+	def track(self, dets_all, frame=0):
 		"""
 		Params:
 		  	dets_all: dict
-				dets - a numpy array of detections in the format [[h,w,l,x,y,z,theta],...]
-				info: a array of other info for each det
+				vision - a numpy array of detections in the format [[h,w,l,x,y,z,theta],...]
+				lidar - a numpy array of detections in the format [[h,w,l,x,y,z,theta],...]
 			frame:    str, frame number, used to query ego pose
 		Requires: this method must be called once for each frame even with empty detections.
-		Returns the a similar array, where the last column is the object ID.
+		Returns a dict with the following keys:
+			results:  a numpy array of tracked boxes in the format [[h,w,l,x,y,z,theta,ID],...]
+			affi:     a dict of affinity matrices for vision and lidar detections
+			preds:    a list of predicted boxes in the format [[h,w,l,x,y,z,theta], ID]
+		Note: 
+			- The results are the active tracks that have been stably associated, i.e., >= min_hits.
+			- The affinity matrix is the cost matrix for data association, where the values are the negative of the similarity scores.
+			- The preds are the predicted boxes for each track.
 
-		NOTE: The number of objects returned may differ from the number of detections provided.
+		NOTE: The number of tracks returned may differ from the number of detections provided.
 		"""
-		dets, info = dets_all['dets'], dets_all['info']         # dets: N x 7, float numpy array
+		dets = dets_all['vision']
+		lidar_dets = dets_all['lidar']
   
 		self.frame_count += 1
 
@@ -187,32 +196,41 @@ class AB3DMOT(object):
 
 		# process detection format
 		dets = self.process_dets(dets)
+		lidar_dets = self.process_dets(lidar_dets)
 
 		# tracks propagation based on velocity
-		trks, trks_ids, trk_info = self.prediction()
+		trks, trks_ids = self.prediction()
    
 		# matching
 		trk_innovation_matrix = None
 		if self.metric == 'm_dis':
 			trk_innovation_matrix = [trk.compute_innovation_matrix() for trk in self.trackers] 
-		matched, unmatched_dets, unmatched_trks, cost, affi = \
-			data_association(dets, trks, self.metric, self.thres, self.algm, trk_innovation_matrix)
+			
+		matched, unmatched_dets_indices, unmatched_trks, cost, affi = \
+			data_association(dets, trks, self.metric, self.vis_thres, self.algm, trk_innovation_matrix)
+		
+		# matching using lidar detections
+
+		lidar_matched, lidar_unmatched_dets, lidar_unmatched_trks, lidar_cost, lidar_affi = \
+			data_association(lidar_dets, trks, self.metric, self.lidar_thres, self.algm, trk_innovation_matrix)
+		
+		affi = {"vision" : affi, "lidar" : lidar_affi}
 
 		# update trks with matched detection measurement
-		self.update(matched, unmatched_trks, dets, info)
+		self.update(matched, lidar_matched, lidar_unmatched_trks, dets, lidar_dets)
 
 		# create and initialise new trackers for unmatched detections
-		new_id_list = self.birth(dets, info, unmatched_dets)
+		new_id_list = self.birth(dets, unmatched_dets_indices)
 
 		# output existing valid tracks
 		results = self.output()
-		if len(results) > 0: results = np.concatenate(results)		# h,w,l,x,y,z,theta, ID, other info
+		if len(results) > 0: results = np.concatenate(results)		# h,w,l,x,y,z,theta, ID
 		else:            	 results = np.empty((0, 15))
 		self.id_now_output = results[:, 7].tolist()					# only the active tracks that are outputed
 		if self.output_preds:
 			preds = []
 			for i, trk in enumerate(trks):
-				pred = [Box3D.bbox2array_raw(trk), trks_ids[i], trk_info[i]]
+				pred = [Box3D.bbox2array_raw(trk), trks_ids[i]]
 				preds.append(pred)
-			return results, preds
-		return results, affi
+			return {"results": results, "affi": affi, "preds": preds}
+		return {"results": results, "affi": affi}

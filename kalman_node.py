@@ -6,7 +6,7 @@ from bbox_utils import detections_to_rviz_marker_array
 
 import numpy as np
 
-from kalman.model import AB3DMOT as tracker
+from kalman.model import Wayfinding_3DMOT as tracker
 
 class KalmanTrackingNode(Node):
     def __init__(self, namespace="camera"):
@@ -15,14 +15,19 @@ class KalmanTrackingNode(Node):
         self.bbox_subscription = self.create_subscription(
             PoseArray,
             namespace + '/yolo/detections',
-            self.box_callback,
+            self.yolo_callback,
+            10)
+        self.lidar_subscription = self.create_subscription(
+            PoseArray,
+            '/dr_spaam_detections',
+            self.lidar_callback,
             10)
         self.bbox_subscription # prevent unused variable warning
         self.bbox_publisher = self.create_publisher(
             MarkerArray,
             namespace + '/kalman/tracked_boxes',
             10)
-        self.tracker = tracker(thres=0.2, output_preds=False)
+        self.tracker = tracker(vis_thres=-0.4, lidar_thres=-0.3, max_age=10, output_preds=False)
         self.colors = [
             [0.5, 0.0, 0.5],
             [0.0, 0.0, 0.5],
@@ -34,14 +39,11 @@ class KalmanTrackingNode(Node):
         ]
         self.generate_new_colors = True
         self.previous_markers_len = 0
-    def box_callback(self, poses_msg):
+    def yolo_callback(self, poses_msg):
+
         # poses are in form [x, y, z, radius]
         # tracker requires [h,w,l,x,y,z,theta]
         r = 0.4
-        X_IDX = 3
-        Y_IDX = 4
-        Z_IDX = 5
-        ID_IDX = 7
         boxes = np.array([[
             r,
             r,
@@ -51,11 +53,40 @@ class KalmanTrackingNode(Node):
             p.position.z,
             0
         ] for p in poses_msg.poses])
-        self.get_logger().info(f"Received {len(boxes)} boxes {boxes}")
-        dets = {"dets": [box for box in boxes], "info": [None for _ in boxes]}
+        self.get_logger().info(f"Received {len(boxes)} boxes {boxes} from camera")
+        dets = {"vision": boxes, "lidar": []}
+        self.box_callback(dets, poses_msg.header.stamp, poses_msg.header.frame_id)
 
-        processed_boxes, affi = self.tracker.track(dets)
+    def lidar_callback(self, poses_msg):
+        # poses are in form [x, y, z, radius]
+        # tracker requires [h,w,l,x,y,z,theta]
+        r = 0.4
+        boxes = np.array([[
+            r,
+            r,
+            r,
+            p.position.x,
+            p.position.y,
+            p.position.z,
+            0
+        ] for p in poses_msg.poses])
+        self.get_logger().info(f"Received {len(boxes)} boxes {boxes} from lidar")
+        dets = {"vision": [], "lidar": boxes}
+        self.box_callback(dets, poses_msg.header.stamp, poses_msg.header.frame_id)
 
+    def box_callback(self, dets, timestamp, frame_id):
+        X_IDX = 3
+        Y_IDX = 4
+        Z_IDX = 5
+        ID_IDX = 7
+        results = self.tracker.track(dets)
+        processed_boxes = results["results"]
+        affi = results["affi"]
+
+        if self.tracker.output_preds:
+            preds = results["preds"]
+            self.get_logger().info(f"Preds: {preds}")
+            
         self.get_logger().info(f"affi: {affi}")
 
         if len(processed_boxes) > 0:
@@ -79,11 +110,11 @@ class KalmanTrackingNode(Node):
 
             # Convert processed boxes to PoseArray for publishing
             rviz_marker = detections_to_rviz_marker_array(
-                boxes, poses_msg.header.stamp, poses_msg.header.frame_id, colors=colors)
+                boxes, timestamp, frame_id, colors=colors)
         else:
             self.get_logger().info("No boxes processed")
-            rviz_marker = detections_to_rviz_marker_array([], poses_msg.header.stamp, poses_msg.header.frame_id)
-        
+            rviz_marker = detections_to_rviz_marker_array([], timestamp, frame_id)
+
         # Add delete markers for previous boxes
         markers_len = len(rviz_marker.markers)
         if self.previous_markers_len > markers_len:
@@ -92,8 +123,8 @@ class KalmanTrackingNode(Node):
                 delete_marker.action = Marker.DELETE
                 delete_marker.ns = "yolo_ros"
                 delete_marker.id = i
-                delete_marker.header.frame_id = poses_msg.header.frame_id
-                delete_marker.header.stamp = poses_msg.header.stamp
+                delete_marker.header.frame_id = frame_id
+                delete_marker.header.stamp = timestamp
                 rviz_marker.markers.append(delete_marker)
         self.previous_markers_len = markers_len
 
