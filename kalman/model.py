@@ -110,6 +110,7 @@ class Wayfinding_3DMOT(object):
 				# trk.kf.x[3], bbox3d[3] = self.orientation_correction(trk.kf.x[3], bbox3d[3])
 
 				if trk.id == self.debug_id:
+					print('track ID %d is matched with detection ID %d' % (trk.id, d[0]))
 					print('After ego-compoensation')
 					print(trk.kf.x.reshape((-1)))
 					print('matched measurement')
@@ -216,8 +217,17 @@ class Wayfinding_3DMOT(object):
 		
 		affi = {"vision" : affi, "lidar" : lidar_affi}
 
+		# set unmatched tracks to the intersection of unmatched tracks from both vision and lidar detections
+		unmatched_trks = list(set(unmatched_trks) & set(lidar_unmatched_trks))
+
+		print('updating with matches:')
+		for m in matched:
+			print(' - track ID %d is matched with vision detection ID %d' % (m[1], m[0]))
+		for m in lidar_matched:
+			print(' - track ID %d is matched with lidar detection ID %d' % (m[1], m[0]))
+
 		# update trks with matched detection measurement
-		self.update(matched, lidar_matched, lidar_unmatched_trks, dets, lidar_dets)
+		self.update(matched, lidar_matched, unmatched_trks, dets, lidar_dets)
 
 		# create and initialise new trackers for unmatched detections
 		new_id_list = self.birth(dets, unmatched_dets_indices)

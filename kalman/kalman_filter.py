@@ -50,15 +50,15 @@ class KF(Filter):
 		                      [0,0,0,0,0,0,1,0,0,0]])
 
 		# measurement uncertainty, uncomment if not super trust the measurement data due to detection noise
-		self.kf.R[0:,0:] *= 10.   
+		# self.kf.R[0:,0:] *= 10.   
 
 		# initial state uncertainty at time 0
 		# Given a single data, the initial velocity is very uncertain, so giv a high uncertainty to start
-		self.kf.P[7:, 7:] *= 100. 	
+		# self.kf.P[7:, 7:] *= 100. 	
 		self.kf.P *= 10.
 
 		# process uncertainty, make the constant velocity part more certain
-		self.kf.Q[7:, 7:] *= 0.1
+		self.kf.Q[7:, 7:] *= 0.01
 
 		# initialize data
 		self.kf.x[:7] = self.initial_pos.reshape((7, 1))

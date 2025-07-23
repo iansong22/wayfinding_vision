@@ -27,7 +27,7 @@ class KalmanTrackingNode(Node):
             MarkerArray,
             namespace + '/kalman/tracked_boxes',
             10)
-        self.tracker = tracker(vis_thres=-0.4, lidar_thres=-0.3, max_age=10, output_preds=False)
+        self.tracker = tracker(vis_thres=-0.4, lidar_thres=-0.2, max_age=10, output_preds=False)
         self.colors = [
             [0.5, 0.0, 0.5],
             [0.0, 0.0, 0.5],
