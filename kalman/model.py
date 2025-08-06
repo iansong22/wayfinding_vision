@@ -106,7 +106,12 @@ class Wayfinding_3DMOT(object):
 				trk.hits += 1
 
 				# update orientation in propagated tracks and detected boxes so that they are within 90 degree
-				bbox3d = Box3D.bbox2array(dets[d[0]]) if not lidar_det else Box3D.bbox2array(lidar_dets[d[0]])
+				if lidar_det:
+					bbox3d = Box3D.bbox2array(lidar_dets[d[0]])
+				else:
+					bbox3d = Box3D.bbox2array(dets[d[0]])
+					trk.class_id = 1
+				# bbox3d = Box3D.bbox2array(dets[d[0]]) if not lidar_det else Box3D.bbox2array(lidar_dets[d[0]])
 				# trk.kf.x[3], bbox3d[3] = self.orientation_correction(trk.kf.x[3], bbox3d[3])
 
 				if trk.id == self.debug_id:
@@ -131,13 +136,13 @@ class Wayfinding_3DMOT(object):
 			# else:
 				# print('track ID %d is not matched' % trk.id)
 
-	def birth(self, dets, unmatched_dets):
+	def birth(self, dets, unmatched_dets, class_id=0):
 		# create and initialise new trackers for unmatched detections
 
 		# dets = copy.copy(dets)
 		new_id_list = list()					# new ID generated for unmatched detections
 		for i in unmatched_dets:        			# a scalar of index
-			trk = KF(Box3D.bbox2array(dets[i]), self.ID_count[0])
+			trk = KF(Box3D.bbox2array(dets[i]), self.ID_count[0], class_id=class_id)
 			self.trackers.append(trk)
 			new_id_list.append(trk.id)
 			# print('track ID %s has been initialized due to new detection' % trk.id)
@@ -158,7 +163,7 @@ class Wayfinding_3DMOT(object):
 			d = Box3D.bbox2array_raw(d)
 
 			if ((trk.time_since_update < self.max_age) and (trk.hits >= self.min_hits or self.frame_count <= self.min_hits)):      
-				results.append(np.concatenate((d, np.array([trk.id]))).reshape(1, -1)) 		
+				results.append(np.concatenate((d, np.array([trk.id, trk.class_id]))).reshape(1, -1)) 		
 			num_trks -= 1
 
 			# deadth, remove dead tracklet
@@ -222,15 +227,16 @@ class Wayfinding_3DMOT(object):
 
 		print('updating with matches:')
 		for m in matched:
-			print(' - track ID %d is matched with vision detection ID %d' % (m[1], m[0]))
+			print(' - track ID %d (#%d) is matched with vision detection #%d' % (trks_ids[m[1]], m[1], m[0]))
 		for m in lidar_matched:
-			print(' - track ID %d is matched with lidar detection ID %d' % (m[1], m[0]))
+			print(' - track ID %d (#%d) is matched with lidar detection #%d' % (trks_ids[m[1]], m[1], m[0]))
 
 		# update trks with matched detection measurement
 		self.update(matched, lidar_matched, unmatched_trks, dets, lidar_dets)
 
 		# create and initialise new trackers for unmatched detections
-		new_id_list = self.birth(dets, unmatched_dets_indices)
+		new_id_list = self.birth(dets, unmatched_dets_indices, class_id=1)
+		new_lidar_id_list = self.birth(lidar_dets, lidar_unmatched_dets, class_id=0)
 
 		# output existing valid tracks
 		results = self.output()

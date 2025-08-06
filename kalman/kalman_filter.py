@@ -12,16 +12,17 @@ Adapted from AB3DMOT
 """
 
 class Filter(object):
-	def __init__(self, bbox3D, ID):
+	def __init__(self, bbox3D, ID, class_id=0):
 
 		self.initial_pos = bbox3D
 		self.time_since_update = 0
 		self.id = ID
 		self.hits = 1           		# number of total hits including the first detection
+		self.class_id = class_id
 
 class KF(Filter):
-	def __init__(self, bbox3D, ID):
-		super().__init__(bbox3D, ID)
+	def __init__(self, bbox3D, ID, class_id=0):
+		super().__init__(bbox3D, ID, class_id=class_id)
 
 		self.kf = KalmanFilter(dim_x=10, dim_z=7)       
 		# There is no need to use EKF here as the measurement and state are in the same space with linear relationship

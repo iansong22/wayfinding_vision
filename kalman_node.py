@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseArray
 from visualization_msgs.msg import Marker, MarkerArray
-from bbox_utils import detections_to_rviz_marker_array
+from bbox_utils import tracks_to_rviz_marker_array
 
 import numpy as np
 
@@ -23,11 +23,15 @@ class KalmanTrackingNode(Node):
             self.lidar_callback,
             10)
         self.bbox_subscription # prevent unused variable warning
+        self.human_publisher = self.create_publisher(
+            MarkerArray,
+            namespace + '/kalman/human_tracks',
+            10)
         self.bbox_publisher = self.create_publisher(
             MarkerArray,
-            namespace + '/kalman/tracked_boxes',
+            namespace + '/kalman/all_tracks',
             10)
-        self.tracker = tracker(vis_thres=-0.4, lidar_thres=-0.2, max_age=10, output_preds=False)
+        self.tracker = tracker(vis_thres=-0.5, lidar_thres=-0.5, max_age=10, output_preds=False)
         self.colors = [
             [0.5, 0.0, 0.5],
             [0.0, 0.0, 0.5],
@@ -79,6 +83,7 @@ class KalmanTrackingNode(Node):
         Y_IDX = 4
         Z_IDX = 5
         ID_IDX = 7
+        CLASS_IDX = 8
         results = self.tracker.track(dets)
         processed_boxes = results["results"]
         affi = results["affi"]
@@ -88,33 +93,38 @@ class KalmanTrackingNode(Node):
             self.get_logger().info(f"Preds: {preds}")
             
         self.get_logger().info(f"affi: {affi}")
-
-        if len(processed_boxes) > 0:
-            # Process the bounding boxes with the tracker
-            self.get_logger().info(f"Processed {len(processed_boxes)} bounding boxes: {processed_boxes}")
             
-            boxes = []
-            colors = []
-            for box in processed_boxes:
-                # box is in the format [h, w, l, x, y, z, theta]
-                boxes.append([box[X_IDX], box[Y_IDX]])
-                idx = int(box[ID_IDX])
-                if len(self.colors) > idx:
-                    color = self.colors[idx]
-                elif self.generate_new_colors:
-                    color = [np.random.rand() for _ in range(3)]
-                    self.colors.append(color)
-                else:
-                    color = self.colors[idx % len(self.colors)]
-                colors.append(color)
+        tracks = []
+        humans = []
+        human_colors = []
+        colors = []
+        
+        # Process the bounding boxes with the tracker
+        # self.get_logger().info(f"Processed {len(processed_boxes)} bounding boxes: {processed_boxes}")
+        for box in processed_boxes:
+            # box is in the format [h, w, l, x, y, z, theta]
+            idx = int(box[ID_IDX])
+            if len(self.colors) > idx:
+                color = self.colors[idx]
+            elif self.generate_new_colors:
+                color = [np.random.rand() for _ in range(3)]
+                self.colors.append(color)
+            else:
+                color = self.colors[idx % len(self.colors)]
+            if box[CLASS_IDX] == 1:
+                tracks.append(([box[X_IDX], box[Y_IDX]], idx, "Human"))
+                humans.append(([box[X_IDX], box[Y_IDX]], idx, "Human"))
+                human_colors.append(color)
+            else:
+                tracks.append(([box[X_IDX], box[Y_IDX]], idx, "Object"))
+            colors.append(color)
 
-            # Convert processed boxes to PoseArray for publishing
-            rviz_marker = detections_to_rviz_marker_array(
-                boxes, timestamp, frame_id, colors=colors)
-        else:
-            self.get_logger().info("No boxes processed")
-            rviz_marker = detections_to_rviz_marker_array([], timestamp, frame_id)
-
+        # Convert processed boxes to PoseArray for publishing
+        rviz_marker = tracks_to_rviz_marker_array(
+            tracks, timestamp, frame_id, 0.2, colors=colors)
+        human_rviz_marker = tracks_to_rviz_marker_array(
+            humans, timestamp, frame_id, 0.2, colors=human_colors)
+        
         # Add delete markers for previous boxes
         markers_len = len(rviz_marker.markers)
         if self.previous_markers_len > markers_len:
@@ -126,8 +136,18 @@ class KalmanTrackingNode(Node):
                 delete_marker.header.frame_id = frame_id
                 delete_marker.header.stamp = timestamp
                 rviz_marker.markers.append(delete_marker)
+        if self.previous_markers_len > len(human_rviz_marker.markers):
+            for i in range(len(human_rviz_marker.markers), self.previous_markers_len):
+                delete_marker = Marker()
+                delete_marker.action = Marker.DELETE
+                delete_marker.ns = "yolo_ros"
+                delete_marker.id = i
+                delete_marker.header.frame_id = frame_id
+                delete_marker.header.stamp = timestamp
+                human_rviz_marker.markers.append(delete_marker)
         self.previous_markers_len = markers_len
 
+        self.human_publisher.publish(human_rviz_marker)
         self.bbox_publisher.publish(rviz_marker)
                 
 def main(namespace="camera",args=None):

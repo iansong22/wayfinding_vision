@@ -83,7 +83,7 @@ class WayfindingYOLONode(Node):
         timestamp_key = image_msg.header.stamp.sec + image_msg.header.stamp.nanosec * 1e-9
         self.image_dict[timestamp_key][1] = cvImg
         if self.image_dict[timestamp_key][0] is not None:
-            self.run_yolo(image_msg.header.stamp)
+            self.yolo_callback(image_msg.header.stamp)
             self.image_dict[timestamp_key] = [None, None]
 
     def image_callback(self, image_msg):
@@ -91,10 +91,10 @@ class WayfindingYOLONode(Node):
         timestamp_key = image_msg.header.stamp.sec + image_msg.header.stamp.nanosec * 1e-9
         self.image_dict[timestamp_key][0] = cvImg
         if self.image_dict[timestamp_key][1] is not None:
-            self.run_yolo(image_msg.header.stamp)
+            self.yolo_callback(image_msg.header.stamp)
             self.image_dict[timestamp_key] = [None, None]
 
-    def run_yolo(self, timestamp : Time):
+    def yolo_callback(self, timestamp : Time):
         func_start = time.time()
         timestamp_key = timestamp.sec + timestamp.nanosec * 1e-9
         color_img, depth_img = self.image_dict[timestamp_key]
@@ -149,7 +149,7 @@ class WayfindingYOLONode(Node):
             self.get_logger().info("No detections found")
             return color_img, humans
             
-        # Iterate through NMS results to draw bounding boxes and labels
+        # Iterate through results to draw bounding boxes and labels
         for mask, box in zip(results[0].masks.xy, results[0].boxes):
             if CLASSES[int(box.cls[0].item())].lower() not in ['person']:
                 continue
@@ -163,6 +163,13 @@ class WayfindingYOLONode(Node):
             humans.append((mask, bbox))
 
         if len(humans) > 0:
+            # Run NMS to filter out overlapping detections
+            boxes = np.array([box for (_, box) in humans])
+            scores = np.array([0.9] * len(boxes))  # Assuming a constant score for simplicity
+            indices = cv2.dnn.NMSBoxes(boxes.tolist(), scores.tolist(), 0.5, 0.7)
+            humans = [humans[i] for i in indices.flatten()]
+
+
             self.get_logger().info(f"{len(humans)} found: {[box for (mask, box) in humans]}")
 
             for (mask, box) in humans:

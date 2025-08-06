@@ -106,31 +106,73 @@ def add_box(image, box, color=(0, 0, 255), thickness=2):
     cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
     return image
 
-def detections_to_rviz_marker_array(dets_xy, timestamp, frame_id, colors=None):
+def detections_to_rviz_marker_array(dets_xy, timestamp, frame_id, height=0, colors=None):
     """
     Convert detections to RViz marker array. Each detection is marked as a circle approximated by line segments.
     :param dets_xy: List of detections, each detection is a tuple (x, y).
     :param timestamp: Timestamp for the marker.
     :param frame_id: Frame ID for the marker.
+    :param height: Height of the marker for visualization.
     :param colors: Optional list of colors for each detection. If None, blue will be used.
     :return msg: Marker message for RViz visualization.
     """
     msg = MarkerArray()
     
     for d_idx, d_xy in enumerate(dets_xy):
-        marker = detections_to_rviz_marker([d_xy], timestamp, frame_id, marker_id=d_idx, color=colors[d_idx % len(colors)] if colors else None)
+        marker = detections_to_rviz_marker([d_xy], timestamp, frame_id, marker_id=d_idx, height=height, color=colors[d_idx % len(colors)] if colors else None)
         msg.markers.append(marker)
     
     return msg
 
-def detections_to_rviz_marker(dets_xy, timestamp, frame_id, marker_id=0, color=None):
+def tracks_to_rviz_marker_array(tracks, timestamp, frame_id, height=0.5, colors=None):
+    """
+    Convert tracks to RViz marker array. Each track is marked as a line.
+    :param tracks: List of tracks, each track is a tuple of ((x,y), id, class_id).
+    :param timestamp: Timestamp for the marker.
+    :param frame_id: Frame ID for the marker.
+    :param height: Height of the marker for visualization.
+    :param colors: Optional list of colors for each detection. If None, blue will be used.
+    :return msg: Marker message for RViz visualization.
+    """
+    msg = MarkerArray()
+
+    for d_idx, (d_xy, track_id, class_id) in enumerate(tracks):
+        color = colors[d_idx % len(colors)] if colors else None
+        marker = detections_to_rviz_marker([d_xy], timestamp, frame_id, marker_id=d_idx, height=height, color=color)
+        msg.markers.append(marker)
+        marker = Marker()
+        marker.action = Marker.ADD
+        marker.ns = "yolo_ros"
+        marker.id = d_idx + len(tracks)
+        marker.header.frame_id = frame_id
+        marker.header.stamp = timestamp
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.pose.position.x = float(d_xy[0])
+        marker.pose.position.y = float(d_xy[1])
+        marker.pose.position.z = height + 0.2
+        marker.scale.z = 0.15  # text height
+        marker.color.r = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        marker.color.a = 1.0
+        if color is not None:
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+        marker.text = f"{track_id}:{class_id}"
+        msg.markers.append(marker)
+    
+    return msg
+
+def detections_to_rviz_marker(dets_xy, timestamp, frame_id, marker_id=0, height=0, color=None):
     """
     @brief     Convert detection to RViz marker msg. Each detection is marked as
                a circle approximated by line segments.
     :param dets_xy: List of detections, each detection is a tuple (x, y).
     :param timestamp: Timestamp for the marker.
     :param frame_id: Frame ID for the marker.
-    ;:param marker_id: Unique ID for the marker.
+    :param marker_id: Unique ID for the marker.
+    :param height: Height of the marker for visualization.
     :param colors: Optional list of colors for each detection.  If None, blue will be used.
     :return msg: Marker message for RViz visualization.
     
@@ -171,15 +213,15 @@ def detections_to_rviz_marker(dets_xy, timestamp, frame_id, marker_id=0, color=N
             # start point of a segment
             p0 = Point()
             p0.x = float(d_xy[0] + xy_offsets[i, 0])
-            p0.z = 0.0
             p0.y = float(d_xy[1] + xy_offsets[i, 1])
+            p0.z = height
             msg.points.append(p0)
 
             # end point
             p1 = Point()
             p1.x = float(d_xy[0] + xy_offsets[i + 1, 0])
-            p1.z = 0.0
             p1.y = float(d_xy[1] + xy_offsets[i + 1, 1])
+            p1.z = height
             msg.points.append(p1)
 
     return msg
