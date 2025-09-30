@@ -214,14 +214,14 @@ def detections_to_rviz_marker(dets_xy, timestamp, frame_id, marker_id=0, height=
             p0 = Point()
             p0.x = float(d_xy[0] + xy_offsets[i, 0])
             p0.y = float(d_xy[1] + xy_offsets[i, 1])
-            p0.z = height
+            p0.z = float(height)
             msg.points.append(p0)
 
             # end point
             p1 = Point()
             p1.x = float(d_xy[0] + xy_offsets[i + 1, 0])
             p1.y = float(d_xy[1] + xy_offsets[i + 1, 1])
-            p1.z = height
+            p1.z = float(height)
             msg.points.append(p1)
 
     return msg
