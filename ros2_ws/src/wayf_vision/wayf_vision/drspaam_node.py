@@ -36,16 +36,17 @@ class DrSpaamROS(Node):
         """
         package_name = "wayf_vision"
         package_path = get_package_share_directory(package_name)
-        self.weight_file = os.path.join(package_path, "models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth")  # Default weight file
-        self.conf_thresh = 0.8  # Default confidence threshold
-        self.stride = 1  # Default stride
-        self.detector_model = "DR-SPAAM"  # Default detector model
-        self.panoramic_scan = True  # Default panoramic scan setting
-        # self.weight_file = self.get_parameter("~weight_file")
-        # self.conf_thresh = self.get_parameter("~conf_thresh")
-        # self.stride = self.get_parameter("~stride")
-        # self.detector_model = self.get_parameter("~detector_model")
-        # self.panoramic_scan = self.get_parameter("~panoramic_scan")
+        self.declare_parameter("weight_file", os.path.join(package_path, "models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth")) # Default weight file
+        self.declare_parameter("conf_thresh", 0.8) # Default confidence threshold
+        self.declare_parameter("stride", 1) # Default stride
+        self.declare_parameter("detector_model", "DR-SPAAM") # Default detector model
+        self.declare_parameter("panoramic_scan", True) # Default panoramic scan setting
+
+        self.weight_file = self.get_parameter("weight_file").get_parameter_value().string_value
+        self.conf_thresh = self.get_parameter("conf_thresh").get_parameter_value().double_value
+        self.stride = self.get_parameter("stride").get_parameter_value().integer_value
+        self.detector_model = self.get_parameter("detector_model").get_parameter_value().string_value
+        self.panoramic_scan = self.get_parameter("panoramic_scan").get_parameter_value().bool_value
 
     def _init(self):
         """

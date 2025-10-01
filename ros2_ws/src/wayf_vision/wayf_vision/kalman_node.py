@@ -12,8 +12,18 @@ class KalmanTrackingNode(Node):
     def __init__(self):
         super().__init__('kalman_tracking_node')
         self.declare_parameter("namespace", '/camera')
+        self.declare_parameter("output_preds", False)
         namespace = self.get_parameter("namespace").get_parameter_value().string_value
-        
+        self.output_preds = self.get_parameter("output_preds").get_parameter_value().bool_value
+
+        self.declare_parameter("vis_thres", -0.5)
+        self.declare_parameter("lidar_thres", -0.5)
+        self.declare_parameter("max_age", 10)
+        vis_thres = self.get_parameter("vis_thres").get_parameter_value().double_value
+        lidar_thres = self.get_parameter("lidar_thres").get_parameter_value().double_value
+        max_age = self.get_parameter("max_age").get_parameter_value().integer_value
+
+
         self.get_logger().info("Initializing Kalman Tracking Node")
         self.bbox_subscription = self.create_subscription(
             PoseArray,
@@ -34,7 +44,7 @@ class KalmanTrackingNode(Node):
             MarkerArray,
             namespace + '/kalman/all_tracks',
             10)
-        self.tracker = tracker(vis_thres=-0.5, lidar_thres=-0.5, max_age=10, output_preds=False)
+        self.tracker = tracker(vis_thres=vis_thres, lidar_thres=lidar_thres, max_age=max_age, output_preds=self.output_preds)
         self.colors = [
             [0.5, 0.0, 0.5],
             [0.0, 0.0, 0.5],

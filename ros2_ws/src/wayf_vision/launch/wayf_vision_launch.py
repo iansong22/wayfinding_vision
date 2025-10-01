@@ -32,7 +32,11 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             parameters=[
-                {'namespace': '/camera'}
+                {'namespace': '/camera'},
+                {'output_preds': False},
+                {'vis_thres': -0.5},
+                {'lidar_thres': -0.5},
+                {'max_age': 10}
             ]
         )
     ])
