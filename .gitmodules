@@ -1,6 +1,4 @@
 [submodule "2D_lidar_person_detection"]
 	path = 2D_lidar_person_detection
 	url = https://github.com/VisualComputingInstitute/2D_lidar_person_detection.git
-[submodule "BiSeNet"]
-	path = BiSeNet
-	url = https://github.com/CoinCheung/BiSeNet.git
+	
