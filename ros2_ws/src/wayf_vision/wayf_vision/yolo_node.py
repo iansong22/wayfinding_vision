@@ -3,7 +3,6 @@ import numpy as np
 import cv2
 from collections import defaultdict
 import time
-import argparse
 
 import rclpy
 from rclpy.node import Node
