@@ -178,3 +178,8 @@ cython_debug/
 
 # Ignore rosbag folder
 rosbag_files/
+
+# Ignore ros2_ws build, install, log files
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
