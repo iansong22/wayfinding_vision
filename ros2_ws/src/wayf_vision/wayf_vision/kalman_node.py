@@ -16,15 +16,20 @@ class KalmanTrackingNode(Node):
         namespace = self.get_parameter("namespace").get_parameter_value().string_value
         self.output_preds = self.get_parameter("output_preds").get_parameter_value().bool_value
 
-        self.declare_parameter("vis_thres", -0.5)
-        self.declare_parameter("lidar_thres", -0.5)
-        self.declare_parameter("max_age", 10)
+        self.declare_parameter("metric", "dist_2d")
+        self.declare_parameter("vis_thres", 0.25)
+        self.declare_parameter("lidar_thres", 0.25)
+        self.declare_parameter("max_age", 20)
+        self.declare_parameter("min_lidar_hits", 3)
+        metric = self.get_parameter("metric").get_parameter_value().string_value
+        min_lidar_hits = self.get_parameter("min_lidar_hits").get_parameter_value().integer_value
         vis_thres = self.get_parameter("vis_thres").get_parameter_value().double_value
         lidar_thres = self.get_parameter("lidar_thres").get_parameter_value().double_value
         max_age = self.get_parameter("max_age").get_parameter_value().integer_value
 
 
         self.get_logger().info("Initializing Kalman Tracking Node")
+        self.get_logger().info(f"Parameters: namespace: {namespace}, metric: {metric}, vis_thres: {vis_thres}, lidar_thres: {lidar_thres}, max_age: {max_age}, min_lidar_hits: {min_lidar_hits}, output_preds: {self.output_preds}")
         self.bbox_subscription = self.create_subscription(
             PoseArray,
             namespace + '/yolo/detections',
@@ -44,7 +49,7 @@ class KalmanTrackingNode(Node):
             MarkerArray,
             namespace + '/kalman/all_tracks',
             10)
-        self.tracker = tracker(vis_thres=vis_thres, lidar_thres=lidar_thres, max_age=max_age, output_preds=self.output_preds)
+        self.tracker = tracker(metric=metric, vis_thres=vis_thres, lidar_thres=lidar_thres, max_age=max_age, min_hits=min_lidar_hits, output_preds=self.output_preds)
         self.colors = [
             [0.5, 0.0, 0.5],
             [0.0, 0.0, 0.5],
@@ -70,7 +75,8 @@ class KalmanTrackingNode(Node):
             p.position.z,
             0
         ] for p in poses_msg.poses])
-        self.get_logger().info(f"Received {len(boxes)} boxes {boxes} from camera")
+        self.get_logger().info(f"Received {len(boxes)} boxes from camera")
+        self.get_logger().debug(f"camera boxes: {boxes}")
         dets = {"vision": boxes, "lidar": []}
         self.box_callback(dets, poses_msg.header.stamp, poses_msg.header.frame_id)
 
@@ -87,7 +93,8 @@ class KalmanTrackingNode(Node):
             p.position.z,
             0
         ] for p in poses_msg.poses])
-        self.get_logger().info(f"Received {len(boxes)} boxes {boxes} from lidar")
+        self.get_logger().info(f"Received {len(boxes)} boxes from lidar")
+        self.get_logger().debug(f"lidar boxes: {boxes}")
         dets = {"vision": [], "lidar": boxes}
         self.box_callback(dets, poses_msg.header.stamp, poses_msg.header.frame_id)
 
@@ -105,7 +112,10 @@ class KalmanTrackingNode(Node):
             preds = results["preds"]
             self.get_logger().info(f"Preds: {preds}")
             
-        self.get_logger().info(f"affi: {affi}")
+        if affi['vision'] is not None:
+            self.get_logger().info(f"affi vision:\n{affi['vision']}")
+        if affi['lidar'] is not None:
+            self.get_logger().info(f"affi lidar:\n{affi['lidar']}")
             
         tracks = []
         humans = []

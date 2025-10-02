@@ -14,6 +14,9 @@ from wayf_vision.kalman.box import Box3D
 from wayf_vision.kalman.matching import data_association
 from wayf_vision.kalman.kalman_filter import KF
 
+HUMAN_ID = 1
+OBJECT_ID = 0
+
 np.set_printoptions(suppress=True, precision=3)
 
 class Wayfinding_3DMOT(object):			  	
@@ -34,7 +37,9 @@ class Wayfinding_3DMOT(object):
 	
 
 		# add negative due to it is the cost
-		if metric in ['dist_3d', 'dist_2d', 'm_dis']: thres *= -1
+		if metric in ['dist_3d', 'dist_2d', 'm_dis']: 
+			vis_thres *= -1
+			lidar_thres *= -1
 
 		self.algm, self.metric, self.vis_thres, self.lidar_thres, self.max_age, self.min_hits = \
 			algm, metric, vis_thres, lidar_thres, max_age, min_hits
@@ -108,9 +113,10 @@ class Wayfinding_3DMOT(object):
 				# update orientation in propagated tracks and detected boxes so that they are within 90 degree
 				if lidar_det:
 					bbox3d = Box3D.bbox2array(lidar_dets[d[0]])
+					# do not change class if detection is from lidar
 				else:
 					bbox3d = Box3D.bbox2array(dets[d[0]])
-					trk.class_id = 1
+					trk.class_id = HUMAN_ID    # vision detection, set to human class
 				# bbox3d = Box3D.bbox2array(dets[d[0]]) if not lidar_det else Box3D.bbox2array(lidar_dets[d[0]])
 				# trk.kf.x[3], bbox3d[3] = self.orientation_correction(trk.kf.x[3], bbox3d[3])
 
@@ -136,7 +142,7 @@ class Wayfinding_3DMOT(object):
 			# else:
 				# print('track ID %d is not matched' % trk.id)
 
-	def birth(self, dets, unmatched_dets, class_id=0):
+	def birth(self, dets, unmatched_dets, class_id=OBJECT_ID):
 		# create and initialise new trackers for unmatched detections
 
 		# dets = copy.copy(dets)
@@ -162,7 +168,7 @@ class Wayfinding_3DMOT(object):
 			d = Box3D.array2bbox(trk.kf.x[:7].reshape((7, )))     # bbox location self
 			d = Box3D.bbox2array_raw(d)
 
-			if ((trk.time_since_update < self.max_age) and (trk.hits >= self.min_hits or self.frame_count <= self.min_hits)):      
+			if ((trk.time_since_update < self.max_age) and (trk.hits >= self.min_hits or self.frame_count <= self.min_hits or trk.class_id == HUMAN_ID)):      
 				results.append(np.concatenate((d, np.array([trk.id, trk.class_id]))).reshape(1, -1)) 		
 			num_trks -= 1
 
@@ -225,18 +231,30 @@ class Wayfinding_3DMOT(object):
 		# set unmatched tracks to the intersection of unmatched tracks from both vision and lidar detections
 		unmatched_trks = list(set(unmatched_trks) & set(lidar_unmatched_trks))
 
-		print('updating with matches:')
-		for m in matched:
-			print(' - track ID %d (#%d) is matched with vision detection #%d' % (trks_ids[m[1]], m[1], m[0]))
-		for m in lidar_matched:
-			print(' - track ID %d (#%d) is matched with lidar detection #%d' % (trks_ids[m[1]], m[1], m[0]))
+		# print('updating with matches:')
+		# for m in matched:
+		# 	print(' - track ID %d (#%d) is matched with vision detection #%d' % (trks_ids[m[1]], m[1], m[0]))
+		# for m in lidar_matched:
+		# 	print(' - track ID %d (#%d) is matched with lidar detection #%d' % (trks_ids[m[1]], m[1], m[0]))
 
 		# update trks with matched detection measurement
 		self.update(matched, lidar_matched, unmatched_trks, dets, lidar_dets)
 
+		# for det_idx in unmatched_dets_indices:
+		# 	print('vision detection ID #%d at index %d is unmatched' % (trks_ids[det_idx], det_idx))
+		# 	print('max affinity for this detection is %.3f' % np.max(affi['vision'][det_idx]))
+
+		for trk_idx in unmatched_trks:
+			print('lidar detection ID #%d at index %d is unmatched' % (trks_ids[trk_idx], trk_idx))
+			# print('max affinity for this detection is %.3f' % np.max(affi['lidar'][:, trk_idx]))
+			
 		# create and initialise new trackers for unmatched detections
-		new_id_list = self.birth(dets, unmatched_dets_indices, class_id=1)
-		new_lidar_id_list = self.birth(lidar_dets, lidar_unmatched_dets, class_id=0)
+		new_id_list = self.birth(dets, unmatched_dets_indices, class_id=HUMAN_ID)
+		new_lidar_id_list = self.birth(lidar_dets, lidar_unmatched_dets, class_id=OBJECT_ID)
+		for new_id in new_id_list:
+			print('track ID %d has been initialized due to new vision detection' % new_id)
+		for new_id in new_lidar_id_list:
+			print('track ID %d has been initialized due to new lidar detection' % new_id)
 
 		# output existing valid tracks
 		results = self.output()

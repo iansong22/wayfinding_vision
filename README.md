@@ -35,7 +35,7 @@ ros2 run wayf_vision yolo_node --ros-args \
   -p namespace:=/camera \
   -p rotate:=true \
   -p readCamearInfo:=true\
-  -p base_id:laser
+  -p base_id:=laser
 ```
 ```
 ros2 run wayf_vision drspaam_node --ros-args \

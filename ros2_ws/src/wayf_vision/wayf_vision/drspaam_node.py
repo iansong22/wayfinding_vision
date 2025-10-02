@@ -21,10 +21,11 @@ class DrSpaamROS(Node):
     def __init__(self):
         super().__init__("DRSpaam")
         self._read_params()
+        self.get_logger().info(f"Starting DR-SPAAM with model path {self.weight_file} and conf_thresh {self.conf_thresh}")
         self._detector = Detector(
             self.weight_file,
             model=self.detector_model,
-            gpu=False,
+            gpu=True,
             stride=self.stride,
             panoramic_scan=self.panoramic_scan,
         )

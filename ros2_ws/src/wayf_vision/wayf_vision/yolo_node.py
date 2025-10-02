@@ -154,7 +154,7 @@ class WayfindingYOLONode(Node):
             color_img = cv2.rotate(color_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
         humans = []
-        if results == None or len(results) == 0 or len(results[0].masks) == 0:
+        if results is None or len(results) == 0 or results[0].masks is None or len(results[0].masks) == 0:
             self.get_logger().info("No detections found")
             return color_img, humans
             
