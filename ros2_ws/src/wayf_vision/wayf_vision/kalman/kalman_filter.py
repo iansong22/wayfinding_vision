@@ -20,6 +20,18 @@ class Filter(object):
 		self.hits = 1           		# number of total hits including the first detection
 		self.class_id = class_id
 
+
+# class KF(Filter):
+# 	def __init__(self, bbox3D, ID, class_id=0):
+# 		super().__init__(bbox3D, ID, class_id=class_id)
+
+# 		self.current_pos = bbox3D
+# 	def update(self, bbox3D):
+# 		# update the state vector with observed bbox.
+# 		self.time_since_update = 0
+# 		self.hits += 1
+# 		self.current_pos = bbox3D
+
 class KF(Filter):
 	def __init__(self, bbox3D, ID, class_id=0):
 		super().__init__(bbox3D, ID, class_id=class_id)
@@ -50,19 +62,20 @@ class KF(Filter):
 		                      [0,0,0,0,0,1,0,0,0,0],
 		                      [0,0,0,0,0,0,1,0,0,0]])
 
-		# measurement uncertainty, uncomment if not super trust the measurement data due to detection noise
-		# self.kf.R[0:,0:] *= 10.   
+		# measurement uncertainty, keep default or reduce if measurements are trusted
+		# self.kf.R[0:,0:] *= 1.   
 
 		# initial state uncertainty at time 0
-		# Given a single data, the initial velocity is very uncertain, so giv a high uncertainty to start
-		# self.kf.P[7:, 7:] *= 100. 	
+		# Set velocity uncertainty very low to strongly assume stationary objects
 		self.kf.P *= 10.
+		self.kf.P[7:, 7:] *= 0.001  # velocity uncertainty very low
 
-		# process uncertainty, make the constant velocity part more certain
-		self.kf.Q[7:, 7:] *= 0.01
+		# process uncertainty, make velocity almost zero (stationary assumption)
+		self.kf.Q[7:, 7:] *= 0.001
 
 		# initialize data
 		self.kf.x[:7] = self.initial_pos.reshape((7, 1))
+		self.kf.x[7:] = 0.  # explicitly set initial velocity to zero
 
 	def compute_innovation_matrix(self):
 		""" compute the innovation matrix for association with mahalanobis distance

@@ -143,7 +143,7 @@ def tracks_to_rviz_marker_array(tracks, timestamp, frame_id, height=0.5, colors=
         marker = Marker()
         marker.action = Marker.ADD
         marker.ns = "yolo_ros"
-        marker.id = d_idx + len(tracks)
+        marker.id = 2*d_idx + len(tracks)
         marker.header.frame_id = frame_id
         marker.header.stamp = timestamp
         marker.type = Marker.TEXT_VIEW_FACING
@@ -160,6 +160,29 @@ def tracks_to_rviz_marker_array(tracks, timestamp, frame_id, height=0.5, colors=
             marker.color.g = color[1]
             marker.color.b = color[2]
         marker.text = f"{track_id}:{class_id}"
+        msg.markers.append(marker)
+        # add a marker to print the location above the track class
+
+        marker = Marker()
+        marker.action = Marker.ADD
+        marker.ns = "yolo_ros"
+        marker.id = 2*d_idx + 1 + len(tracks)
+        marker.header.frame_id = frame_id
+        marker.header.stamp = timestamp
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.pose.position.x = float(d_xy[0])
+        marker.pose.position.y = float(d_xy[1])
+        marker.pose.position.z = height + 0.4
+        marker.scale.z = 0.15  # text height
+        marker.color.r = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        marker.color.a = 1.0
+        if color is not None:
+            marker.color.r = color[0]
+            marker.color.g = color[1]
+            marker.color.b = color[2]
+        marker.text = f"pos:({d_xy[0]:.2f},{d_xy[1]:.2f})"
         msg.markers.append(marker)
     
     return msg

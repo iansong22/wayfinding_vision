@@ -219,12 +219,12 @@ class Wayfinding_3DMOT(object):
 			trk_innovation_matrix = [trk.compute_innovation_matrix() for trk in self.trackers] 
 			
 		matched, unmatched_dets_indices, unmatched_trks, cost, affi = \
-			data_association(dets, trks, self.metric, self.vis_thres, self.algm, trk_innovation_matrix)
+			data_association(dets, trks, self.metric, self.vis_thres, self.algm, trk_innovation_matrix, trk_info=trks_ids)
 		
 		# matching using lidar detections
 
 		lidar_matched, lidar_unmatched_dets, lidar_unmatched_trks, lidar_cost, lidar_affi = \
-			data_association(lidar_dets, trks, self.metric, self.lidar_thres, self.algm, trk_innovation_matrix)
+			data_association(lidar_dets, trks, self.metric, self.lidar_thres, self.algm, trk_innovation_matrix, trk_info=trks_ids)
 		
 		affi = {"vision" : affi, "lidar" : lidar_affi}
 
@@ -244,8 +244,8 @@ class Wayfinding_3DMOT(object):
 		# 	print('vision detection ID #%d at index %d is unmatched' % (trks_ids[det_idx], det_idx))
 		# 	print('max affinity for this detection is %.3f' % np.max(affi['vision'][det_idx]))
 
-		for trk_idx in unmatched_trks:
-			print('lidar detection ID #%d at index %d is unmatched' % (trks_ids[trk_idx], trk_idx))
+		# for trk_idx in unmatched_trks:
+			# print('lidar detection ID #%d at index %d is unmatched' % (trks_ids[trk_idx], trk_idx))
 			# print('max affinity for this detection is %.3f' % np.max(affi['lidar'][:, trk_idx]))
 			
 		# create and initialise new trackers for unmatched detections

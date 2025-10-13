@@ -6,7 +6,7 @@ from rclpy.node import Node
 
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Point, Pose, PoseArray
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 
 from dr_spaam.detector import Detector
 
@@ -63,6 +63,9 @@ class DrSpaamROS(Node):
         self._rviz_pub = self.create_publisher(
             Marker, topic, queue_size
         )
+        self._confidence_pub = self.create_publisher(
+            MarkerArray, topic + "_confidence", queue_size
+        )
 
         # Subscriber
         topic, queue_size = self.read_subscriber_param("scan")
@@ -110,6 +113,9 @@ class DrSpaamROS(Node):
         rviz_msg = detections_to_rviz_marker(dets_xy, dets_cls)
         rviz_msg.header = msg.header
         self._rviz_pub.publish(rviz_msg)
+
+        confidence_msg = detections_to_confidence_array(dets_xy, dets_cls, msg.header)
+        self._confidence_pub.publish(confidence_msg)
         
 
     def read_subscriber_param(self, name):
@@ -191,6 +197,46 @@ def detections_to_rviz_marker(dets_xy, dets_cls):
 
     return msg
 
+def detections_to_confidence_array(dets_xy, dets_cls, header):
+    """
+    @brief     Convert detection to RViz marker msg. Each detection is marked as
+               a circle approximated by line segments.
+    """
+    msg = MarkerArray()
+
+    # to msg
+    for i, (d_xy, d_cls) in enumerate(zip(dets_xy, dets_cls)):
+        marker = Marker()
+        marker.action = Marker.ADD
+        marker.ns = "dr_spaam_ros"
+        marker.id = i * 1000
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.header = header
+
+        # set quaternion so that RViz does not give warning
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+
+        marker.pose.position.x = float(d_xy[0])
+        marker.pose.position.y = float(d_xy[1])
+        marker.pose.position.z = 1.0  # Slightly above ground
+
+        marker.scale.z = 0.3  # Text height
+
+        # Color gradient from red (low confidence) to green (high confidence)
+        marker.color.r = float(1.0 - d_cls)
+        marker.color.g = float(d_cls)
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+
+        marker.text = f"{d_cls:.2f}"  # Display confidence value
+
+        msg.markers.append(marker)
+            
+
+    return msg
 
 def detections_to_pose_array(dets_xy, dets_cls):
     pose_array = PoseArray()
