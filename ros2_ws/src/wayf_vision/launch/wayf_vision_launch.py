@@ -34,8 +34,8 @@ def generate_launch_description():
             parameters=[
                 {'namespace': '/camera'},
                 {'output_preds': False},
-                {'vis_thres': -0.5},
-                {'lidar_thres': -0.5},
+                {'vis_thres': 0.25},
+                {'lidar_thres': 0.25},
                 {'max_age': 10}
             ]
         )
