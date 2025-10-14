@@ -113,6 +113,10 @@ class Wayfinding_3DMOT(object):
 				# update orientation in propagated tracks and detected boxes so that they are within 90 degree
 				if lidar_det:
 					bbox3d = Box3D.bbox2array(lidar_dets[d[0]])
+					
+					# kalman filter update with observation
+					trk.update(bbox3d)
+
 					# do not change class if detection is from lidar
 				else:
 					bbox3d = Box3D.bbox2array(dets[d[0]])
@@ -121,9 +125,6 @@ class Wayfinding_3DMOT(object):
 						trk = KF(trk.get_curr_pos(), trk.id, class_id=HUMAN_ID)
 					else:
 						trk.class_id = HUMAN_ID  # set to human if matched with vision detection
-
-				# kalman filter update with observation
-				trk.update(bbox3d)
 
 			# debug use only
 			# else:
