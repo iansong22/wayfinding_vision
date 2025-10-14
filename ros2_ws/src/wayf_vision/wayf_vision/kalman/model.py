@@ -12,7 +12,7 @@ Adapted from AB3DMOT
 import numpy as np, os, copy, math
 from wayf_vision.kalman.box import Box3D
 from wayf_vision.kalman.matching import data_association
-from wayf_vision.kalman.kalman_filter import KF
+from wayf_vision.kalman.kalman_filter import KF, stationary_KF
 
 HUMAN_ID = 1
 OBJECT_ID = 0
@@ -20,10 +20,11 @@ OBJECT_ID = 0
 np.set_printoptions(suppress=True, precision=3)
 
 class Wayfinding_3DMOT(object):			  	
-	def __init__(self, metric="giou_3d", algm = "greedy", vis_thres=0.5, lidar_thres=0.5, max_age = 5, min_hits = 1, ID_init=0, output_preds=False):             
+	def __init__(self, metric="giou_3d", algm = "greedy", vis_thres=0.5, lidar_thres=0.5, max_age = 5, min_hits = 1, ID_init=0, use_stationary=False, output_preds=False):             
      
 		self.output_preds = output_preds
-  
+		self.use_stationary = use_stationary
+
 		# counter
 		self.trackers = []
 		self.frame_count = 0
@@ -61,7 +62,7 @@ class Wayfinding_3DMOT(object):
 
 		return dets_new
 
-	def prediction(self):
+	def prediction(self, increase_time=True):
 		# get predicted locations from existing tracks
 
 		trks = []
@@ -73,20 +74,19 @@ class Wayfinding_3DMOT(object):
    
 			if kf_tmp.id == self.debug_id:
 				print('\n before prediction')
-				print(kf_tmp.kf.x.reshape((-1)))
+				print(kf_tmp.get_curr_pos().reshape((-1)))
 				print('\n current velocity')
 				print(kf_tmp.get_velocity())
-    
-			kf_tmp.kf.predict()
-   
+
+			kf_tmp.predict(increase_time=increase_time)
+
 			if kf_tmp.id == self.debug_id:
 				print('After prediction')
-				print(kf_tmp.kf.x.reshape((-1)))
-			# kf_tmp.kf.x[3] = self.within_range(kf_tmp.kf.x[3])
+				print(kf_tmp.get_curr_pos().reshape((-1)))
 
 			# update statistics
 			kf_tmp.time_since_update += 1 		
-			trk_tmp = kf_tmp.kf.x.reshape((-1))[:7]
+			trk_tmp = kf_tmp.get_curr_pos().reshape((-1))[:7]
 			trks.append(Box3D.array2bbox(trk_tmp))
 			trks_ids.append(kf_tmp.id)
 
@@ -116,27 +116,14 @@ class Wayfinding_3DMOT(object):
 					# do not change class if detection is from lidar
 				else:
 					bbox3d = Box3D.bbox2array(dets[d[0]])
-					trk.class_id = HUMAN_ID    # vision detection, set to human class
-				# bbox3d = Box3D.bbox2array(dets[d[0]]) if not lidar_det else Box3D.bbox2array(lidar_dets[d[0]])
-				# trk.kf.x[3], bbox3d[3] = self.orientation_correction(trk.kf.x[3], bbox3d[3])
-
-				if trk.id == self.debug_id:
-					print('track ID %d is matched with detection ID %d' % (trk.id, d[0]))
-					print('After ego-compoensation')
-					print(trk.kf.x.reshape((-1)))
-					print('matched measurement')
-					print(bbox3d.reshape((-1)))
+					if self.use_stationary and trk.class_id == OBJECT_ID:  # previously matched with lidar detection
+						# change to KF
+						trk = KF(trk.get_curr_pos(), trk.id, class_id=HUMAN_ID)
+					else:
+						trk.class_id = HUMAN_ID  # set to human if matched with vision detection
 
 				# kalman filter update with observation
-				trk.kf.update(bbox3d)
-
-				if trk.id == self.debug_id:
-					print('after matching')
-					print(trk.kf.x.reshape((-1)))
-					print('\n current velocity')
-					print(trk.get_velocity())
-
-				# trk.kf.x[3] = self.within_range(trk.kf.x[3])
+				trk.update(bbox3d)
 
 			# debug use only
 			# else:
@@ -148,7 +135,10 @@ class Wayfinding_3DMOT(object):
 		# dets = copy.copy(dets)
 		new_id_list = list()					# new ID generated for unmatched detections
 		for i in unmatched_dets:        			# a scalar of index
-			trk = KF(Box3D.bbox2array(dets[i]), self.ID_count[0], class_id=class_id)
+			if self.use_stationary and class_id == OBJECT_ID:
+				trk = stationary_KF(Box3D.bbox2array(dets[i]), self.ID_count[0], class_id=class_id)
+			else:
+				trk = KF(Box3D.bbox2array(dets[i]), self.ID_count[0], class_id=class_id)
 			self.trackers.append(trk)
 			new_id_list.append(trk.id)
 			# print('track ID %s has been initialized due to new detection' % trk.id)
@@ -165,7 +155,7 @@ class Wayfinding_3DMOT(object):
 		results = []
 		for trk in reversed(self.trackers):
 			# change format from [x,y,z,theta,l,w,h] to [h,w,l,x,y,z,theta]
-			d = Box3D.array2bbox(trk.kf.x[:7].reshape((7, )))     # bbox location self
+			d = Box3D.array2bbox(trk.get_curr_pos().reshape((7, )))     # bbox location self
 			d = Box3D.bbox2array_raw(d)
 
 			if ((trk.time_since_update < self.max_age) and (trk.hits >= self.min_hits or self.frame_count <= self.min_hits or trk.class_id == HUMAN_ID)):      
@@ -211,7 +201,7 @@ class Wayfinding_3DMOT(object):
 		lidar_dets = self.process_dets(lidar_dets)
 
 		# tracks propagation based on velocity
-		trks, trks_ids = self.prediction()
+		trks, trks_ids = self.prediction(increase_time=(len(dets) > 0))
    
 		# matching
 		trk_innovation_matrix = None

@@ -68,10 +68,10 @@ class KF(Filter):
 		# initial state uncertainty at time 0
 		# Set velocity uncertainty very low to strongly assume stationary objects
 		self.kf.P *= 10.
-		self.kf.P[7:, 7:] *= 0.001  # velocity uncertainty very low
+		self.kf.P[7:, 7:] *= 0.01  # velocity uncertainty very low
 
 		# process uncertainty, make velocity almost zero (stationary assumption)
-		self.kf.Q[7:, 7:] *= 0.001
+		self.kf.Q[7:, 7:] *= 0.01
 
 		# initialize data
 		self.kf.x[:7] = self.initial_pos.reshape((7, 1))
@@ -86,3 +86,38 @@ class KF(Filter):
 		# return the object velocity in the state
 
 		return self.kf.x[7:]
+	
+	def get_curr_pos(self):
+		# return the current position estimate
+		return self.kf.x[:7].reshape((7, ))
+	
+	def predict(self, increase_time=True):
+		# predict the next state, before the update step
+		self.kf.predict()
+		if increase_time:
+			self.time_since_update += 1
+		return self.kf.x[:7].reshape((7, ))
+	
+	def update(self, bbox3D):
+		# update the state vector with observed bbox.
+		self.time_since_update = 0
+		self.hits += 1
+		self.kf.update(bbox3D.reshape((7, 1)))
+
+class stationary_KF(Filter):
+	def __init__(self, bbox3D, ID, class_id=0):
+		super().__init__(bbox3D, ID, class_id=class_id)
+		self.x = bbox3D.reshape((7, 1))
+	def get_curr_pos(self):
+		# return the current position estimate
+		return self.x.reshape((7, ))
+	def predict(self, increase_time=True):
+		# predict the next state, before the update step
+		if increase_time:
+			self.time_since_update += 1
+		return self.x.reshape((7, ))
+	def update(self, bbox3D):
+		# update the state vector with observed bbox.
+		self.time_since_update = 0
+		self.hits += 1
+		self.x = bbox3D.reshape((7, 1))
