@@ -17,10 +17,10 @@ class KalmanTrackingNode(Node):
         self.output_preds = self.get_parameter("output_preds").get_parameter_value().bool_value
 
         self.declare_parameter("metric", "dist_2d")
-        self.declare_parameter("vis_thres", 0.25)
-        self.declare_parameter("lidar_thres", 0.25)
+        self.declare_parameter("vis_thres", 0.3)
+        self.declare_parameter("lidar_thres", 0.3)
         self.declare_parameter("max_age", 20)
-        self.declare_parameter("min_lidar_hits", 3)
+        self.declare_parameter("min_lidar_hits", 1)
         metric = self.get_parameter("metric").get_parameter_value().string_value
         min_lidar_hits = self.get_parameter("min_lidar_hits").get_parameter_value().integer_value
         vis_thres = self.get_parameter("vis_thres").get_parameter_value().double_value

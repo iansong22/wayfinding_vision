@@ -169,7 +169,7 @@ class Wayfinding_3DMOT(object):
 
 		return results
 
-	def track(self, dets_all, frame=0):
+	def track(self, dets_all, frame=0, debug=False):
 		"""
 		Params:
 		  	dets_all: dict
@@ -242,10 +242,11 @@ class Wayfinding_3DMOT(object):
 		# create and initialise new trackers for unmatched detections
 		new_id_list = self.birth(dets, unmatched_dets_indices, class_id=HUMAN_ID)
 		new_lidar_id_list = self.birth(lidar_dets, lidar_unmatched_dets, class_id=OBJECT_ID)
-		for new_id in new_id_list:
-			print('track ID %d has been initialized due to new vision detection' % new_id)
-		for new_id in new_lidar_id_list:
-			print('track ID %d has been initialized due to new lidar detection' % new_id)
+		if debug:
+			for new_id in new_id_list:
+				print('track ID %d has been initialized due to new vision detection' % new_id)
+			for new_id in new_lidar_id_list:
+				print('track ID %d has been initialized due to new lidar detection' % new_id)
 
 		# output existing valid tracks
 		results = self.output()

@@ -57,7 +57,7 @@ def greedy_matching(cost_matrix):
     return np.asarray(matched_indices)
 
 def data_association(dets, trks, metric, threshold, algm='greedy', \
-	trk_innovation_matrix=None, trk_info=[]):   
+	trk_innovation_matrix=None, trk_info=[], debug=False):   
 	"""
 	Assigns detections to tracked object
 
@@ -104,14 +104,16 @@ def data_association(dets, trks, metric, threshold, algm='greedy', \
 	for t, trk in enumerate(trks):
 		if (t not in matched_indices[:, 1]): unmatched_trks.append(t)
 
-	# filter out matches with low affinity
-	print(f"{len(matched_indices)} matches:")
-	[print(' - det: %s, - trk: %s, aff: %.3f, trk_id: %s' % (f"({dets[m[0]].x:.3f}, {dets[m[0]].y:.3f})", f"({trks[m[1]].x:.3f}, {trks[m[1]].y:.3f})", aff_matrix[m[0], m[1]], trk_info[m[1]])) for m in matched_indices]
+	if debug:
+		# filter out matches with low affinity
+		print(f"{len(matched_indices)} matches:")
+		[print(' - det: %s, - trk: %s, aff: %.3f, trk_id: %s' % (f"({dets[m[0]].x:.3f}, {dets[m[0]].y:.3f})", f"({trks[m[1]].x:.3f}, {trks[m[1]].y:.3f})", aff_matrix[m[0], m[1]], trk_info[m[1]])) for m in matched_indices]
 	matches = []
 	for m in matched_indices:
 		if (aff_matrix[m[0], m[1]] < threshold):
-			print('affinity %.3f below threshold %.3f, set to unmatched' % (aff_matrix[m[0], m[1]], threshold), end='')
-			print(' - det: %s, - trk: %s' % (str(dets[m[0]]), str(trks[m[1]])))
+			if debug:
+				print('affinity %.3f below threshold %.3f, set to unmatched' % (aff_matrix[m[0], m[1]], threshold), end='')
+				print(' - det: %s, - trk: %s' % (str(dets[m[0]]), str(trks[m[1]])))
 			unmatched_dets.append(m[0])
 			unmatched_trks.append(m[1])
 		else: matches.append(m.reshape(1, 2))
