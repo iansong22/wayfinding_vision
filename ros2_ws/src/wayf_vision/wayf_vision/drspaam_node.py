@@ -37,8 +37,8 @@ class DrSpaamROS(Node):
         """
         package_name = "wayf_vision"
         package_path = get_package_share_directory(package_name)
-        self.declare_parameter("weight_file", os.path.join(package_path, "models/ckpt_jrdb_ann_ft_dr_spaam_e20.pth")) # Default weight file
-        self.declare_parameter("conf_thresh", 0.8) # Default confidence threshold
+        self.declare_parameter("weight_file", os.path.join(package_path, "models/dr_spaam_5_on_frog.pth")) # Default weight file
+        self.declare_parameter("conf_thresh", 0.3) # Default confidence threshold
         self.declare_parameter("stride", 1) # Default stride
         self.declare_parameter("detector_model", "DR-SPAAM") # Default detector model
         self.declare_parameter("panoramic_scan", True) # Default panoramic scan setting
