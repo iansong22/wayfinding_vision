@@ -71,7 +71,7 @@ class KF(Filter):
 		self.kf.P[7:, 7:] *= 0.01  # velocity uncertainty very low
 
 		# process uncertainty, make velocity almost zero (stationary assumption)
-		self.kf.Q[7:, 7:] *= 0.01
+		self.kf.Q[7:, 7:] *= 0.001
 
 		# initialize data
 		self.kf.x[:7] = self.initial_pos.reshape((7, 1))

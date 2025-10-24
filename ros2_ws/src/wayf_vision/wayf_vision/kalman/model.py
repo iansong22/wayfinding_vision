@@ -85,7 +85,7 @@ class Wayfinding_3DMOT(object):
 				print(kf_tmp.get_curr_pos().reshape((-1)))
 
 			# update statistics
-			kf_tmp.time_since_update += 1 		
+			# kf_tmp.time_since_update += 1 		
 			trk_tmp = kf_tmp.get_curr_pos().reshape((-1))[:7]
 			trks.append(Box3D.array2bbox(trk_tmp))
 			trks_ids.append(kf_tmp.id)
@@ -110,7 +110,7 @@ class Wayfinding_3DMOT(object):
 				trk.time_since_update = 0		# reset because just updated
 				trk.hits += 1
 
-				# update orientation in propagated tracks and detected boxes so that they are within 90 degree
+				# update tracks
 				if lidar_det:
 					bbox3d = Box3D.bbox2array(lidar_dets[d[0]])
 					
@@ -169,7 +169,7 @@ class Wayfinding_3DMOT(object):
 
 		return results
 
-	def track(self, dets_all, frame=0, debug=False):
+	def track(self, dets_all, frame=0, debug=True):
 		"""
 		Params:
 		  	dets_all: dict
@@ -210,12 +210,12 @@ class Wayfinding_3DMOT(object):
 			trk_innovation_matrix = [trk.compute_innovation_matrix() for trk in self.trackers] 
 			
 		matched, unmatched_dets_indices, unmatched_trks, cost, affi = \
-			data_association(dets, trks, self.metric, self.vis_thres, self.algm, trk_innovation_matrix, trk_info=trks_ids)
+			data_association(dets, trks, self.metric, self.vis_thres, self.algm, trk_innovation_matrix, trk_info=trks_ids, debug=debug)
 		
 		# matching using lidar detections
 
 		lidar_matched, lidar_unmatched_dets, lidar_unmatched_trks, lidar_cost, lidar_affi = \
-			data_association(lidar_dets, trks, self.metric, self.lidar_thres, self.algm, trk_innovation_matrix, trk_info=trks_ids)
+			data_association(lidar_dets, trks, self.metric, self.lidar_thres, self.algm, trk_innovation_matrix, trk_info=trks_ids, debug=debug)
 		
 		affi = {"vision" : affi, "lidar" : lidar_affi}
 
