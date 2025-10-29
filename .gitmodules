@@ -2,3 +2,6 @@
 	path = 2D_lidar_person_detection
 	url = https://github.com/VisualComputingInstitute/2D_lidar_person_detection.git
 	
+[submodule "SingularTrajectory"]
+	path = SingularTrajectory
+	url = https://github.com/InhwanBae/SingularTrajectory.git
